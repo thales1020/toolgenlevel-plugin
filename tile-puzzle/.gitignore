@@ -1,0 +1,4 @@
+# Plugin build artifacts / OS cruft (ARCHITECTURE.md §3)
+__pycache__/
+*.pyc
+desktop.ini

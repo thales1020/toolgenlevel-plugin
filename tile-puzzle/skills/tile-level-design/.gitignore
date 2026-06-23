@@ -1,0 +1,4 @@
+# Build artifacts / OS cruft — keep out of skill source (ARCHITECTURE.md §3, P7)
+__pycache__/
+*.pyc
+desktop.ini

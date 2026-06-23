@@ -1,0 +1,18 @@
+{
+  "name": "toolgenlevel",
+  "owner": {
+    "name": "ToolGenLevel team"
+  },
+  "description": "Internal marketplace for Triple Match (Tile Explorer) level-design tooling.",
+  "plugins": [
+    {
+      "name": "tile-puzzle",
+      "source": "./tile-puzzle",
+      "description": "Triple Match level-design toolkit: gen-layout (empty layout geometry from shape/icon/bulk) + tile-level-design (assign tiles, score difficulty, solve/verify, traps).",
+      "version": "0.1.0",
+      "author": {
+        "name": "ToolGenLevel team"
+      }
+    }
+  ]
+}

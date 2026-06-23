@@ -1,0 +1,131 @@
+{
+  "source": "tile_explorer_boards",
+  "deduped": true,
+  "n_distinct": 6407,
+  "n_raw": 7949,
+  "layer_count_dist": {
+    "1": 0.0048,
+    "2": 0.0072,
+    "3": 0.0464,
+    "4": 0.1143,
+    "5": 0.189,
+    "6": 0.253,
+    "7": 0.1647,
+    "8": 0.0983,
+    "9": 0.0507,
+    "10": 0.0474,
+    "11": 0.0084,
+    "12": 0.0084,
+    "13": 0.0034,
+    "14": 0.0016,
+    "15": 0.0014,
+    "16": 0.0009
+  },
+  "cell_count": {
+    "median": 72,
+    "p10": 62,
+    "p90": 108
+  },
+  "base_cells": {
+    "median": 16.0
+  },
+  "capacity": {
+    "median": 24
+  },
+  "bbox": {
+    "w_median": 6.0,
+    "h_median": 7.0
+  },
+  "aspect_median": 0.86,
+  "base_fill": {
+    "median": 0.464,
+    "p10": 0.25,
+    "p90": 0.8
+  },
+  "symmetry_rate": {
+    "h": 0.642,
+    "v": 0.432
+  },
+  "clusters_per_board": {
+    "median": 5.0
+  },
+  "cluster_size": {
+    "median": 1.0,
+    "mean": 2.26,
+    "dist": {
+      "1": 0.703,
+      "2": 0.095,
+      "3": 0.067,
+      "4": 0.027,
+      "5": 0.038,
+      "6": 0.07
+    }
+  },
+  "tower_height": {
+    "median": 4,
+    "mean": 4.13
+  },
+  "stacking_offset": {
+    "0.5,0.5": 0.679,
+    "0.5,0.0": 0.1,
+    "0.0,0.0": 0.096,
+    "0.0,0.5": 0.085
+  },
+  "pickable_start": {
+    "median": 12.0
+  },
+  "cover_ratio_median": 0.84,
+  "layout_difficulty": {
+    "median": 4.81,
+    "mean": 5.93,
+    "p90": 10.91
+  },
+  "diversity_unique_pct": 80.6,
+  "source_levels": 104,
+  "normal_approx": {
+    "_caveat": "NOT truly Gaussian. ~normal at +-2sigma (93-98% coverage) but shape differs: cell/capacity peaked+right-skewed (skew +1.7), width/height slight left-skew, base hard-bounded left (NOT normal, skew +8.9). Use mu+-2sigma only as a soft QC acceptance band; use empirical p10/p90 for skewed metrics. empirical_gen matches by construction so this is for QC/judgment, NOT generation.",
+    "cell_count": {
+      "mu": 79.1,
+      "sigma": 21.0,
+      "skew": 1.7,
+      "in1s": 0.81,
+      "in2s": 0.94
+    },
+    "layer_count": {
+      "mu": 6.2,
+      "sigma": 2.0,
+      "skew": 0.72,
+      "in1s": 0.71,
+      "in2s": 0.96
+    },
+    "width": {
+      "mu": 6.3,
+      "sigma": 1.1,
+      "skew": -0.27,
+      "in1s": 0.64,
+      "in2s": 0.95
+    },
+    "height": {
+      "mu": 7.1,
+      "sigma": 1.4,
+      "skew": -0.55,
+      "in1s": 0.72,
+      "in2s": 0.93
+    },
+    "capacity": {
+      "mu": 26.4,
+      "sigma": 7.0,
+      "skew": 1.68,
+      "in1s": 0.81,
+      "in2s": 0.94
+    },
+    "base": {
+      "mu": 17.8,
+      "sigma": 10.6,
+      "skew": 8.92,
+      "in1s": 0.77,
+      "in2s": 0.98,
+      "note": "NOT normal - log-normal-like"
+    }
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "tile-sim": {
+      "command": "python",
+      "args": ["tile_mcp_server.py"],
+      "cwd": "c:/Users/PC1150/Downloads/GD_Test"
+    }
+  }
+}

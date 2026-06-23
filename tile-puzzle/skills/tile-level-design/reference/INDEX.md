@@ -1,0 +1,16 @@
+- [Difficulty design workflow](difficulty_design_workflow.md) — approved approach: distribution-based metrics, 8 parallel workers, v3 solvability check
+- [Game rules & solver bugs](game_rules_and_bugs.md) — tray game-over rule is `>=7 AND no triple`; display labels = tile_id+1
+- [Solver infrastructure](solver_infrastructure.md) — verify_smart_v3 / solve_path / find_easy_top3 are the go-to scripts
+- [Hidden trap levels](hidden_trap_levels.md) — "trap ẩn" design: v3 solvable + 95-100% greedy fail; obvious early triple is a bait; `trap_an_L20_s82.json` is the reference
+- [Hybrid easy-top + trap](hybrid_easy_top_trap.md) — custom tile assignment: top layers pure easy, bottom trap. Bypasses TEEngine. Cover100-aware: never place easy on invisible cells
+- [5 Level Design Patterns](level_design_patterns.md) — now 6 patterns: trap ẩn, easy-top, hybrid custom, 90% fail, clear-50%, guided trap
+- [Verify before play](feedback_verify_before_play.md) — MUST double-verify (v3+solve_path) and save exact board BEFORE play_level; workers can overwrite candidate files
+- [Search speed optimizations](feedback_search_speed.md) — 8 rules: filter order, precompute bb, clone in-memory, validate=False, unique files, 2-stage greedy, clone board, double-verify
+- [Priority tile assignment](feedback_priority_assignment.md) — easy types must go on pickable cells (tier1), NOT cover100 cells
+- [Cascade assignment](cascade_assignment.md) — for deep uniform layouts (L21): place same easy type vertically in stacks for cascade reveals; limit to 1-2 stacks
+- [Layout strategy mapping](layout_strategy_mapping.md) — 117 layouts classified into Cascade/Priority/Random; how to combine with 6 design patterns; ref: layout_strategy_analysis.csv
+- [Bridge distribution](bridge_distribution.md) — use bridge types (6 copies spanning top→bottom) so revealed tiles feel familiar; bridge must be matchable triples at bottom; learned from real Yellow L21
+- [Guided Trap](guided_trap.md) — 3-zone gradient: easy cascade + breadcrumbs (trap hints in mid) + trap cascade in bottom; prevents blind guessing
+- [Gen all 9 patterns](gen_all_9_pattern.md) — `gen_all_9.py` single script: 7 subprocess + 2 inline → all 9 levels in ~20s, save to all_9_boards.json
+- [T3 + cover100 high pitfall](t3_cover100_pitfall.md) — `find_hybrid_fast.py` chậm 510x trên L32 cover100=86% (40 phút!); dùng cascade/bridge/guided cho cover100 >70%
+- [Effective layer concept](effective_layer_concept.md) — eff_layer = #higher_layers_with_overlap+1; dùng cho strip 2-window + cover100; same-type subtract giữ -1 vì hidden tiles không phải easy từ player view
