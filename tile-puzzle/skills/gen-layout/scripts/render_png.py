@@ -51,7 +51,19 @@ def mask_to_png(grid, out, cell=16, fg=(53, 187, 106), bg=(245, 250, 253), grid_
 
 
 LAYER_RGB = [(53, 187, 106), (47, 159, 208), (224, 169, 58), (208, 106, 106),
-             (142, 106, 208), (70, 207, 124), (127, 140, 154), (192, 86, 58)]
+             (142, 106, 208), (70, 207, 124), (127, 140, 154), (192, 86, 58),
+             (58, 120, 192), (208, 92, 168), (120, 192, 58), (86, 86, 86)]
+
+
+def _layer_color(L):
+    """Distinct colour per layer. Beyond len(LAYER_RGB) layers, darken each wrap
+    so e.g. L0 and L12 read differently instead of rendering identically."""
+    base = LAYER_RGB[L % len(LAYER_RGB)]
+    wrap = L // len(LAYER_RGB)
+    if wrap == 0:
+        return base
+    factor = max(0.4, 1.0 - 0.25 * wrap)  # darken 25% per wrap, floor at 0.4
+    return tuple(int(c * factor) for c in base)
 
 
 def layout_to_png(path, out, ppu=22):
@@ -63,6 +75,15 @@ def layout_to_png(path, out, ppu=22):
     for ly in d["layers"]:
         for s in ly["stones"]:
             cells.append((ly["index"], float(s["x"]), float(s["y"])))
+    if not cells:
+        # empty layout: render a tiny blank image instead of crashing on min()/max()
+        print(f"WARN empty layout (no cells) in {path}; rendering blank image")
+        bg = (245, 250, 253)
+        W = H = ppu
+        rgb_rows = [b"".join(bytes(bg) for _ in range(W)) for _ in range(H)]
+        with open(out, "wb") as f:
+            f.write(_png(W, H, rgb_rows))
+        return W, H
     xs = [c[1] for c in cells]; ys = [c[2] for c in cells]
     minx, maxx, miny, maxy = min(xs), max(xs), min(ys), max(ys)
     pad = ppu
@@ -74,8 +95,10 @@ def layout_to_png(path, out, ppu=22):
     for (L, x, y) in sorted(cells, key=lambda c: c[0]):  # base first, top last
         px = int(round((x - minx) * ppu)) + pad
         py = int(round((maxy - y) * ppu)) + pad   # flip y
-        inset = L  # higher layers slightly smaller so stacking reads
-        col = LAYER_RGB[L % len(LAYER_RGB)]
+        # higher layers slightly smaller so stacking reads; clamp so deep layers
+        # keep a minimum visible size (never zero/negative width)
+        inset = min(L, (side - 2) // 2)
+        col = _layer_color(L)
         for yy in range(py + inset, py + side - inset):
             if 0 <= yy < H:
                 row = canvas[yy]

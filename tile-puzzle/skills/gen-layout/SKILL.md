@@ -1,7 +1,7 @@
 ---
 name: gen-layout
-description: "Create empty multi-layer LAYOUTS (cell geometry, NO tiles) for the Tile Explorer Triple Match game — from a prose shape, an icon/image, or in bulk. Upstream tool: outputs empty NewLayout_*.json that the tile-level-design skill then fills with tiles. Does NOT assign tiles or score difficulty."
-when_to_use: "When the user wants a NEW layout/template/shape (heart, duck, sword…), an icon→layout, or bulk layout geometry. If the user wants a LEVEL from an image/shape, run gen-layout FIRST, then tile-level-design fills tiles. NOT for producing a playable level with tiles/difficulty — that is the tile-level-design skill (which has its own layouts)."
+description: "Create an empty multi-layer LAYOUT (cell geometry, NO tiles) for the Tile Explorer Triple Match game — from a prose shape or an icon/image, ONE symmetry-ranked layout at a time (aesthetics + 4-axis symmetry prioritised). Upstream tool: outputs an empty NewLayout_*.json that the tile-level-design skill then fills with tiles. Does NOT assign tiles or score difficulty."
+when_to_use: "When the user wants a NEW layout/template/shape (heart, duck, sword…) or an icon→layout. If the user wants a LEVEL from an image/shape, run gen-layout FIRST, then tile-level-design fills tiles. NOT for producing a playable level with tiles/difficulty — that is the tile-level-design skill (which has its own layouts). Bulk layout generation was retired — compose layouts one at a time."
 ---
 
 # gen-layout skill
@@ -20,27 +20,57 @@ Core rule from EXPERIENCES.md: **SPARSE-DEEP, never solid-shallow.** Real boards
 
 ---
 
-## 2. Two generation modes
+## 2. One mode: compose (ONE layout at a time, symmetry-ranked)
 
-| Request | Mode | How |
-|---|---|---|
-| **A shape / prose** ("a sword", "a key", "this logo") | **compose** | Claude reads EXPERIENCES → designs [x,y,height] anchors → `claude_compose.compose(spec)` |
-| **Bulk / abstract** ("100 layouts for the game") | **empirical** | `empirical_gen.sample()` — samples + perturbs real board skeletons from `templates_bank.json`; **7/8 KS-indistinguishable** from real |
-| **Bulk, fully symmetric** ("100 đối xứng đẹp") | **symmetric** | exact h-symmetry **by construction** (symmetric-component crossover); fixes empirical's "gần đối xứng" jaggedness; offline via `symmetric_components.json` |
-| **Bulk, real mix** ("100 khớp game, vừa sym vừa asym") | **mixed** | `~sym-frac` exact-symmetric + phần còn lại clean-asymmetric (drop trọn 1 cluster một bên, không lởm chởm) |
+gen-layout makes **one well-composed layout per call** from a shape/prose/image. **Aesthetics and
+symmetry are the top priority.** Bulk generation was retired (see §4).
 
-**Why Claude, not a parametric generator:** a hand-tuned parametric generator plateaus at ~1/8 KS match (features coupled). Sampling real skeletons hits 7/8 for bulk; and **only Claude** can make a recognizable novel shape in-distribution (e.g. a sword as diagonal/sparse/deep like the competitor's real level15 sword — a sampler cannot take "make a sword").
+| Request | How |
+|---|---|
+| **A shape / prose** ("a sword", "a key", "this logo") | Claude reads EXPERIENCES → designs `[x,y,height]` anchors → `gen_layouts.py --mode compose` (`claude_compose.compose`) |
+| **A recognizable icon/animal/image** | mask → `gen_shape_layout.py` (crisp silhouette; §3 note) |
+
+**Symmetry is MEASURED on 4 axes and RANKED, never forced** ("đo & xếp hạng, không ép"):
+`vertical` (left-right), `horizontal` (top-bottom), `diag_main` (/), `diag_anti` (\\). Every compose
+writes `symmetry_axes`, `symmetry_best_axis`, `symmetry_score` (max of the 4) into metadata, and the
+CLI prints them. Symmetric objects → `mirror=True` on the right axis → that axis scores **1.00**;
+elongated/asymmetric objects → `--no-mirror` (kept recognizable, lower score is OK).
+
+**Why Claude, not a parametric generator:** **only Claude** can make a recognizable novel shape
+in-distribution (e.g. a sword as diagonal/sparse/deep like the competitor's level15 sword — a sampler
+cannot take "make a sword"). Code only renders coordinates + measures symmetry deterministically.
 
 ---
 
 ## 3. Compose mode — step by step
 
 > **Recognizable shapes (icon/animal/logo)? Use the AESTHETIC path, NOT raw `compose()`.**
-> `compose()` gives every base cell a lone +0.5 tower → the rim fringes into a checkerboard and
-> the shape dissolves in the stacked render. Instead: build a 2D mask → **verify the FLAT
-> silhouette reads** → `python ${CLAUDE_SKILL_DIR}/scripts/gen_shape_layout.py --mask m.txt --name duck --layers 5
-> [--target 180]` (capped_inset depth: crisp rim + inset mound; emits `_<name>_flat.png` review +
-> `_<name>_stack.png`). See EXPERIENCES [8]. Use bare `compose()` only for abstract/non-pictorial specs.
+> `compose()` gives every base cell a lone +0.5 tower → the rim fringes into a checkerboard.
+> **SIMPLIFY THE IMAGE FIRST — the board space is SMALL** (real boards ~16–24 base footprints, ~6
+> layers, mobile-portrait aspect ~0.88). A detailed/complex picture **cannot** be reproduced
+> faithfully: reduce it to a **low-res recognizable silhouette**, drop small features, accept "reads
+> like the idea" over pixel-faithful. Then: build a 2D mask → **verify the FLAT silhouette reads** →
+> `python ${CLAUDE_SKILL_DIR}/scripts/gen_shape_layout.py --mask m.txt --name duck --layers 5 [--target 180] [--mirror] [--min-sym 0.8]`.
+> It **auto-runs the complexity gate** (`evaluate_icon`) and **warns when over budget** (>~48
+> footprints / aspect >1.1 → simplify); defaults to **EVEN** depth (`--mound` = central mound);
+> **MEASURES symmetry on 4 axes**, and `--mirror --axis …` snaps to score **1.00** (`--min-sym`
+> gates). Emits `_<name>_flat.png` (silhouette review) + `_<name>_stack.png`. See EXPERIENCES [8].
+> Use bare `compose()` only for abstract/non-pictorial specs.
+>
+> **MATCH THE SOURCE OBJECT'S SYMMETRY (do this for every image):** first COUNT how many reflection
+> axes the object in the image has, then build a layout with the SAME symmetry via `--mirror --axis`:
+>
+> | Object reflection axes | Example | Flag |
+> |---|---|---|
+> | **0** (asymmetric / directional) | sword, key, animal facing a way | `--no-mirror` (measure only) |
+> | **1** vertical (left–right) | shield, heart, cup, front-facing face | `--mirror --axis vertical` |
+> | **1** horizontal (top–bottom) | a fish in side view, a boat | `--mirror --axis horizontal` |
+> | **2** (L-R **and** T-B) | ellipse, eye, rounded rectangle | `--mirror --axis vh` |
+> | **4** (vert+hori+both diagonals, D4) | square decorative tile, mandala, flower medallion, snowflake | `--mirror --axis d4` |
+>
+> `vh`/`d4` union the symmetry orbit then orbit-repair support + div3 → that group's axes all read
+> **1.00**, valid & playable. (Odd-fold symmetry — a 3- or 5-pointed star — doesn't map to the square
+> grid; pick the nearest of the above, usually `d4` or `vertical`.)
 
 Claude authors the layout spec, code renders it:
 
@@ -50,15 +80,20 @@ Step 2. Design anchor list: [(x, y, height), ...] following every experience.
         - Sparse: ~8–16 base anchors, not a filled grid
         - Deep: heights 4–8 (mean ~5)
         - CLASSIFY symmetry FIRST (text prompts only; an image already carries it — B5):
-          · Symmetric object (shield, heart, cup, lantern…) → build half + mirror=True
-            (compose drops mirror-PAIRS → EXACTLY symmetric, no stray cells).
-          · Elongated/asymmetric (sword, key, arrow, leaf…) → mirror=False + DIAGONAL tilt to one
+          · Symmetric object (shield, heart, cup, lantern…) → build half + mirror=True on the
+            matching axis: `--axis vertical` (left-right, default) or `--axis horizontal` (top-bottom).
+            compose drops mirror-PAIRS → that axis scores EXACTLY 1.00, no stray cells.
+          · Elongated/asymmetric (sword, key, arrow, leaf…) → --no-mirror + DIAGONAL tilt to one
             side (EXP [2]); a diagonal also fits the mobile-PORTRAIT frame — never lay it wide (B4).
+            Lower symmetry_score is EXPECTED here (not forced).
 Step 3. Run: python ${CLAUDE_SKILL_DIR}/scripts/gen_layouts.py --mode compose --spec '<JSON>' --name <name> --out <dir>
         e.g.: python ${CLAUDE_SKILL_DIR}/scripts/gen_layouts.py --mode compose \
               --spec '[[0,0,6],[1,2,5],[-1,3,4],[2,4,3]]' \
-              --name sword --out layouts/
-Step 4. Validate: check printed layout_diff (~5 target); inspect rendered PNG (optional).
+              --name sword --no-mirror --out layouts/
+        Optional gate: add `--min-sym 0.8` for a symmetric object → exit 2 + WARNING if the best of
+        the 4 axes < 0.8, so you re-compose (ranks symmetry up without forcing it).
+Step 4. Validate: read the printed `symmetry: vert/hori/diag/diag -> best …` line (symmetric shapes
+        should hit best≈1.00 on the intended axis) + layout_diff (~5 target); inspect PNG (optional).
 Step 5. Hand to tile-level-design: python <tile-level-design>/templates/find_trap_fast.py ...
 ```
 
@@ -78,34 +113,18 @@ spec = [
 
 ---
 
-## 4. Empirical (bulk) mode
+## 4. Bulk generation — RETIRED (do not bulk-gen layouts)
 
-Samples + perturbs real board skeletons. No LLM needed.
+The bulk modes (`empirical` / `abstract` / `symmetric` / `mixed`) and their data banks
+(`templates_bank.json`, `symmetric_components.json`, `excluded_sigs.json`) were **removed**.
 
-```bash
-# 100 layouts matching real game distribution
-python ${CLAUDE_SKILL_DIR}/scripts/gen_layouts.py --mode empirical --n 100 --out layouts/pool/ --seed 1
+**Why:** at scale, per-board symmetry/aesthetics could not be guaranteed. Measured on the real
+sym-fraction metric, `empirical` kept only **~8%** of boards perfectly symmetric (real boards: ~66%),
+with an ugly tail down to 0.32 — exactly the "xấu, bất đối xứng" the team reported. Quality of a
+single layout > a pile of mediocre ones. gen-layout now does **one symmetry-ranked layout per call**.
 
-# Single abstract layout
-python ${CLAUDE_SKILL_DIR}/scripts/gen_layouts.py --mode empirical --n 1 --out layouts/ --seed 42
-
-# Abstract parametric families (more variety, lower KS match)
-python ${CLAUDE_SKILL_DIR}/scripts/gen_layouts.py --mode abstract --n 50 --dmin 5 --dmax 8 --out layouts/
-
-# FULLY symmetric (exact h-symmetry by construction; fixes empirical's "gần đối xứng")
-python ${CLAUDE_SKILL_DIR}/scripts/gen_layouts.py --mode symmetric --n 100 --out layouts/sym_pool/ --seed 1
-
-# Distribution-correct mix: ~64% exact-symmetric + ~36% clean-asymmetric
-python ${CLAUDE_SKILL_DIR}/scripts/gen_layouts.py --mode mixed --n 100 --sym-frac 0.64 --out layouts/mix_pool/ --seed 1
-```
-
-Output: `NewLayout_<name>.json` + `manifest.json` per batch.
-
-> **Why symmetric/mixed exist:** `empirical_gen` perturbs a real skeleton but its top-trim +
-> support-cleanup are one-sided → only "gần đối xứng" (measured: 12% visibly asymmetric). `symmetric`
-> and `mixed` delegate to `gen_symmetric.py` (component crossover) which guarantees exact h-symmetry
-> by construction and runs **offline** via bundled `symmetric_components.json` (rebuild: `gen_symmetric.py
-> --build-cache`; `--selftest` locks the math). See EXPERIENCES [12].
+If you genuinely need many layouts, compose them **one at a time** (each gets the 4-axis symmetry
+check), or use the 120 bundled sample layouts in the `tile-level-design` skill.
 
 ---
 
@@ -127,7 +146,9 @@ Output: `NewLayout_<name>.json` + `manifest.json` per batch.
   {"index":1,"stones":[{"x":-0.5,"y":-0.5},...]}
 ],"stacks":[],"metadata":{
   "layout":"sword","source":"claude_compose","n_layers":6,
-  "total_tiles":54,"capacity":18,"layout_difficulty":5.2}}
+  "total_tiles":54,"capacity":18,"layout_difficulty":5.2,
+  "symmetry_axes":{"vertical":1.0,"horizontal":0.24,"diag_main":0.0,"diag_anti":0.0},
+  "symmetry_best_axis":"vertical","symmetry_score":1.0}}
 ```
 
 **tile-level-design loads it via:**
@@ -158,36 +179,8 @@ Procedure:
 4. Keep it falsifiable + concrete (numbers, file names, the render that proved it).
 Skip only if the feedback is a one-off cosmetic tweak with no transferable principle.
 
-### 7b. Training-Free GRPO loop (optional, needs real boards data)
-
-Run a GRPO round to update the experience library. **Free — no API.**
-
-```bash
-# Extract competitor boards first (one-time)
-python -c "import zipfile; zipfile.ZipFile('refs/boards_Full.zip').extractall('data/boards')"
-
-# Run 1 GRPO round (G=5 rollouts)
-python ${CLAUDE_SKILL_DIR}/scripts/run_grpo_round.py --boards data/boards --G 5 --round 1 --save-dir data/grpo/
-
-# Read the report, then Claude Code updates EXPERIENCES.md:
-# - Which features was winner better at?
-# - What structural pattern explains the gap?
-# - Add/Modify/Delete/Keep in EXPERIENCES.md
-```
-
-**Loop:**
-```
-generate G layouts -> score vs real -> identify winner/loser -> Claude reads report ->
-update EXPERIENCES.md -> generate G layouts again -> ...
-```
-
-Each round takes ~30s. Run 3-5 rounds per session. The paper uses 3 epochs; for our domain, 1-2 rounds per session is enough for a targeted improvement.
-
-**When to update which experience:**
-- Winner has feature X closer to real than loser -> reinforce the rule that drives X
-- Loser keeps violating rule [N] -> strengthen rule [N] or add a clearer constraint
-- Winner has a pattern not in EXPERIENCES -> Add new experience
-- Two experiences say the same thing -> Merge them
+> The Training-Free GRPO loop (auto-learning EXPERIENCES from a real-boards corpus) was removed
+> with the bulk pipeline. Update EXPERIENCES.md by hand from what each composed layout teaches.
 
 ---
 
@@ -196,29 +189,25 @@ Each round takes ~30s. Run 3-5 rounds per session. The paper uses 3 epochs; for 
 ```
 gen-layout/
   SKILL.md                  <- this file
-  EXPERIENCES.md            <- token prior (12 learned rules, updatable)
-  LAYOUT_PRIORS.md          <- statistical priors from 8019 real boards
+  EXPERIENCES.md            <- token prior (learned shape/symmetry rules, updatable)
+  LAYOUT_PRIORS.md          <- statistical priors from real boards (deep/sparse/symmetric)
   layout_priors.json        <- raw numbers
-  templates_bank.json       <- 400 real board skeletons (for empirical_gen)
   engine/                   <- tile_level_simulator + verify_smart_v3 + solve_path + scoring_weights
   scripts/
-    gen_layouts.py          <- CLI: --mode [empirical|abstract|compose|symmetric|mixed]
+    gen_layouts.py          <- CLI: --mode compose (the only mode; bulk retired) + 4-axis symmetry report
+    claude_compose.py       <- spec -> rendered cell-set (mirror axis vertical/horizontal, or no-mirror)
+    geom.py                 <- pure geometry + 4-AXIS symmetry scorer (sym_scores / geom_symmetrize / geom_div3_trim)
     gen_shape_layout.py     <- SHAPE layouts (icon/animal): mask -> capped_inset/even depth -> exact tile count [EXP 8,9]
     gen_region_depth.py     <- per-COLOUR-REGION depth from an image (beak/eye deeper than body) [EXP 10]
-    gen_symmetric.py        <- FULLY-symmetric bulk gen via component crossover (--n / --selftest / --build-cache) [EXP 12]
+                               (--auto grid detect · --heights · --axis vertical|horizontal|vh|d4 · deep-tower-safe trim)
     gen_soda_cup_cov.py     <- hit an exact cover100 % (e.g. 50/75% completely covered) via 2-phase tuner [EXP 11]
-    run_grpo_round.py       <- TF-GRPO round runner (G rollouts -> KS score -> report)
-    claude_compose.py       <- spec -> rendered cell-set
-    empirical_gen.py        <- sample+perturb real skeletons (7/8 KS)
-    validate_prior.py       <- KS reward function (full rigor, held-out test)
+    symmetrize_layout.py    <- enforce exact symmetry on an existing layout (geom-mirror)
     validate_layout.py      <- structural validity check
     render_png.py           <- optional visualization
     clone_layout.py         <- copy + resize/reshape a reference board
     fit_layout.py           <- hit exact tile count target
     target_difficulty.py    <- hit level-difficulty target after tile assignment
-    eda_full.py             <- EDA over a boards directory
-    grpo_round.py           <- older parametric GRPO generator (kept for reference)
-    test_full.py            <- test suite (12 tests)
+    test_full.py            <- test suite (14 tests, incl. compose + 4-axis symmetry)
     test_usecases.py        <- use case integration tests
 ```
 

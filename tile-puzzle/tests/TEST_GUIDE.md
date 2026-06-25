@@ -41,7 +41,7 @@ Ghi lại: skill thực tế nổ + output, so với cột "kỳ vọng".
 | ID | Prompt (gõ vào) | Skill kỳ vọng | Đậu khi | KQ |
 |---|---|---|---|---|
 | A1 | `tạo một màn chơi dễ` | tile-level-design | ra **level có tile** (dùng 1 sample layout), không hỏi layout | |
-| A2 | `tạo 100 layout cho game` | gen-layout | ra **100 layout rỗng** (no tile) | |
+| A2 | `tạo layout hình khiên đối xứng` | gen-layout | ra **1 layout rỗng**, in `symmetry: … best vertical≈1.00` (bulk đã bỏ — compose từng cái) | |
 | A3 | `màn này giải được không?` (kèm 1 file level) | tile-level-design | chạy v3 → True/False | |
 | A4 | `phân tích độ khó màn này` (kèm level) | tile-level-design | in 5-component score (analyze) ⟵ GAP1 | |
 | A5 | `chuẩn hóa file level này` | tile-level-design | normalize + inject metadata ⟵ GAP1 | |

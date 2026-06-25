@@ -46,13 +46,14 @@ except Exception as e:
 # ---- UC2: target DIFFICULTY ----
 # (a) layout-difficulty (0-12, geometry, fast)
 try:
-    g = SF.circle(7)
-    res = GL.build_in_band(g, 6.0, 8.0)
-    d = res[1] if res else None
-    ok = res and 5.8 <= d <= 8.2
-    rec("UC2a", "target layout-difficulty (0-12)", "PASS" if ok else "FAIL", f"circle -> layout-diff {d:.2f} in [6,8]")
+    import claude_compose as CC
+    # layout-difficulty is REPORTED on every compose; Claude tunes heights to a target (no bulk search)
+    cells = CC.compose([[0, 2, 4], [1, 1, 5], [2, 0, 4], [1, -1, 3], [0, -2, 2]], mirror=True)
+    d = GL.layout_diff(cells)
+    ok = isinstance(d, float) and d >= 0
+    rec("UC2a", "layout-difficulty reported on compose", "PASS" if ok else "FAIL", f"compose -> layout-diff {d:.2f}")
 except Exception as e:
-    rec("UC2a", "target layout-difficulty (0-12)", "FAIL", f"{type(e).__name__}: {e}")
+    rec("UC2a", "layout-difficulty reported on compose", "FAIL", f"{type(e).__name__}: {e}")
 # (b) level-difficulty (needs tiles) - small, just prove we can move + hit a band
 try:
     # level-difficulty via color dial is LAYOUT-DEPENDENT: on irregular silhouettes
@@ -122,25 +123,17 @@ try:
 except Exception as e:
     rec("UC6", "parametric shape (no image)", "FAIL", f"{type(e).__name__}: {e}")
 
-# ---- UC7: BULK N layouts in a difficulty band (industrial branch A) ----
+# ---- UC7: 4-AXIS symmetry scored + ranked on compose (replaces retired bulk) ----
 try:
-    rng = random.Random(2); kept = 0; seen = set()
-    fams = list(SF.FAMILIES.keys())
-    for _ in range(60):
-        if kept >= 5: break
-        fam = rng.choice(fams); grid = SF.FAMILIES[fam](rng)
-        grid = SF.apply_transform(grid, rng.choice(SF.TRANSFORMS), rng)
-        res = GL.build_in_band(grid, 6.0, 8.0)
-        if not res: continue
-        cells, d = res; ct = [(c[0], c[1], c[2]) for c in cells]
-        if not (5.8 <= d <= 8.2) or not GL.structural_ok(ct): continue
-        sig = SF.exact_sig(ct)
-        if sig in seen: continue
-        seen.add(sig); kept += 1
-    ok = kept >= 5
-    rec("UC7", "bulk N layouts in diff band", "PASS" if ok else "FAIL", f"produced {kept}/5 distinct in band")
+    import claude_compose as CC
+    from geom import sym_scores
+    sym = CC.compose([[0, 3, 2], [1, 2, 3], [2, 1, 2], [1, 0, 3], [0, -1, 2]], mirror=True, axis="vertical")
+    sc = sym_scores(sym)
+    ok = abs(sc["vertical"] - 1.0) < 1e-6 and max(sc, key=sc.get) == "vertical"
+    rec("UC7", "4-axis symmetry scored + ranked", "PASS" if ok else "FAIL",
+        f"best={max(sc,key=sc.get)}={sc[max(sc,key=sc.get)]:.2f} axes={sc}")
 except Exception as e:
-    rec("UC7", "bulk N layouts in diff band", "FAIL", f"{type(e).__name__}: {e}")
+    rec("UC7", "4-axis symmetry scored + ranked", "FAIL", f"{type(e).__name__}: {e}")
 
 # ---- UC8: shape with intentional HOLE preserved (donut/ring) ----
 try:

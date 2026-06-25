@@ -21,7 +21,10 @@ BANDS = dict(
     holes_warn=1,
     min_width_warn=3, min_width_fail=2,
     spikiness_warn=40.0, spikiness_fail=70.0,
-    aspect_lo=0.45, aspect_hi=2.2,
+    # aspect = w/h. Real-board target is ~0.88 (mobile-portrait). Prefer portrait:
+    # warn when wider than ~1.1 (too landscape for a portrait board); allow a small
+    # landscape tolerance up to aspect_warn_hi; fail only on extreme aspect.
+    aspect_warn_hi=1.1, aspect_fail_lo=0.4, aspect_fail_hi=2.2,
     stack_warn=3, stack_fail=2,
     capacity_fail=2,
 )
@@ -78,8 +81,10 @@ def evaluate(grid):
         fail(f"viền quá gai (spikiness {spike:.0f}) — icon quá chi tiết")
     elif spike >= BANDS["spikiness_warn"]:
         warn(f"viền gai (spikiness {spike:.0f})")
-    if not (BANDS["aspect_lo"] <= aspect <= BANDS["aspect_hi"]):
-        warn(f"tỉ lệ {aspect:.2f} hơi lệch")
+    if aspect < BANDS["aspect_fail_lo"] or aspect > BANDS["aspect_fail_hi"]:
+        fail(f"tỉ lệ {aspect:.2f} quá lệch (target ~0.88 portrait)")
+    elif aspect > BANDS["aspect_warn_hi"]:
+        warn(f"tỉ lệ {aspect:.2f} hơi rộng — board dọc ưu tiên ~0.88 (portrait)")
 
     if fails:
         verdict = "too-complex"

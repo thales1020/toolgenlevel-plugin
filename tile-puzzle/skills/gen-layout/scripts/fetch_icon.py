@@ -8,7 +8,7 @@ Icon ids: browse https://icon-sets.iconify.design  (prefix:name, e.g. mdi:heart,
 ph:star-fill, tabler:diamond). Icons are open-source — keep the per-set license/
 attribution. Needs network (local only; not the web sandbox).
 """
-import sys, os, argparse, urllib.request
+import sys, os, argparse, urllib.request, urllib.error
 
 API = "https://api.iconify.design"
 

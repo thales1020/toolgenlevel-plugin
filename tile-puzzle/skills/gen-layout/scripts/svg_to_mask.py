@@ -162,44 +162,165 @@ def _ellipse_poly(cx, cy, rx, ry, n=48):
     return [[(cx + rx*math.cos(2*math.pi*k/n), cy + ry*math.sin(2*math.pi*k/n)) for k in range(n)]]
 
 
+# ---- attribute extraction (quote-agnostic: matches "..." OR '...') ----
+def _attrs(tag):
+    """Parse an element's attributes -> dict, accepting single OR double quotes.
+    (re.findall yields '' — not None — for the non-matching quote alternative.)"""
+    # exactly one quote alternative matches; the other group is '' (re.findall never
+    # yields None), so `v1 or v2` selects the populated one for any non-empty value.
+    return {k: (v1 or v2)
+            for k, v1, v2 in re.findall(r'([\w:-]+)\s*=\s*(?:"([^"]*)"|\'([^\']*)\')', tag)}
+
+
+# ---- affine transforms ----
+IDENT = (1.0, 0.0, 0.0, 1.0, 0.0, 0.0)  # (a, b, c, d, e, f): x' = a*x + c*y + e, y' = b*x + d*y + f
+
+
+def _mat_mul(m1, m2):
+    a1, b1, c1, d1, e1, f1 = m1
+    a2, b2, c2, d2, e2, f2 = m2
+    return (a1*a2 + c1*b2,        b1*a2 + d1*b2,
+            a1*c2 + c1*d2,        b1*c2 + d1*d2,
+            a1*e2 + c1*f2 + e1,   b1*e2 + d1*f2 + f1)
+
+
+def _parse_transform(s):
+    """Parse an SVG transform string into a single affine matrix.
+    Supports translate / scale / matrix / rotate (incl. rotate about a point)."""
+    m = IDENT
+    if not s:
+        return m
+    for name, args in re.findall(r"(\w+)\s*\(([^)]*)\)", s):
+        v = _nums(args)
+        if name == "translate":
+            tx = v[0] if v else 0.0
+            ty = v[1] if len(v) > 1 else 0.0
+            m = _mat_mul(m, (1, 0, 0, 1, tx, ty))
+        elif name == "scale":
+            sx = v[0] if v else 1.0
+            sy = v[1] if len(v) > 1 else sx
+            m = _mat_mul(m, (sx, 0, 0, sy, 0, 0))
+        elif name == "matrix" and len(v) == 6:
+            m = _mat_mul(m, tuple(v))
+        elif name == "rotate" and v:
+            ang = math.radians(v[0]); ca, sa = math.cos(ang), math.sin(ang)
+            if len(v) >= 3:  # rotate around (cx, cy)
+                cx, cy = v[1], v[2]
+                m = _mat_mul(m, (1, 0, 0, 1, cx, cy))
+                m = _mat_mul(m, (ca, sa, -sa, ca, 0, 0))
+                m = _mat_mul(m, (1, 0, 0, 1, -cx, -cy))
+            else:
+                m = _mat_mul(m, (ca, sa, -sa, ca, 0, 0))
+    return m
+
+
+def _apply(m, pts):
+    a, b, c, d, e, f = m
+    return [(a*x + c*y + e, b*x + d*y + f) for x, y in pts]
+
+
+def _fill_is_none(attrs):
+    """True if the element is explicitly fill:none (attribute or style)."""
+    fill = attrs.get("fill")
+    style = attrs.get("style", "")
+    ms = re.search(r"fill\s*:\s*([^;]+)", style)
+    if ms:
+        fill = ms.group(1).strip()
+    return fill is not None and fill.strip().lower() == "none"
+
+
 def svg_to_polygons(svg):
+    """Return list of (polygon_points, fill_none) — fill_none flags stroke-only paths.
+
+    Walks the SVG token stream so nested <g transform=...> matrices compose and
+    apply to each shape's points. Attribute parsing is quote-agnostic.
+    """
     polys = []
-    for m in re.finditer(r"<path[^>]*\bd\s*=\s*\"([^\"]+)\"", svg):
-        polys += parse_path(m.group(1))
-    for m in re.finditer(r"<circle[^>]*>", svg):
-        a = dict(re.findall(r'(\w+)\s*=\s*"([^"]*)"', m.group(0)))
-        if "r" in a:
-            polys += _circle_poly(float(a.get("cx", 0)), float(a.get("cy", 0)), float(a["r"]))
-    for m in re.finditer(r"<ellipse[^>]*>", svg):
-        a = dict(re.findall(r'(\w+)\s*=\s*"([^"]*)"', m.group(0)))
-        polys += _ellipse_poly(float(a.get("cx", 0)), float(a.get("cy", 0)),
-                               float(a.get("rx", 1)), float(a.get("ry", 1)))
-    for m in re.finditer(r"<rect[^>]*>", svg):
-        a = dict(re.findall(r'(\w+)\s*=\s*"([^"]*)"', m.group(0)))
-        x, y = float(a.get("x", 0)), float(a.get("y", 0))
-        w, h = float(a.get("width", 0)), float(a.get("height", 0))
-        polys.append([(x, y), (x+w, y), (x+w, y+h), (x, y+h)])
-    for m in re.finditer(r"<polygon[^>]*\bpoints\s*=\s*\"([^\"]+)\"", svg):
-        n = _nums(m.group(1))
-        polys.append([(n[k], n[k+1]) for k in range(0, len(n)-1, 2)])
+    # transform stack: list of (matrix, depth_of_open_g) — popped on matching </g>
+    stack = []  # entries: matrix
+    depth = 0   # current <g> nesting depth
+
+    def cur_mat():
+        m = IDENT
+        for sm in stack:
+            m = _mat_mul(m, sm)
+        return m
+
+    # Tokenize into <g>, </g>, and self-contained shape elements, in document order.
+    tok = re.compile(
+        r"<g\b[^>]*>|</g\s*>|<(?:path|circle|ellipse|rect|polygon|polyline)\b[^>]*/?>",
+        re.IGNORECASE)
+    for mt in tok.finditer(svg):
+        tag = mt.group(0)
+        low = tag.lower()
+        if low.startswith("<g"):
+            ga = _attrs(tag)
+            stack.append(_parse_transform(ga.get("transform", "")))
+            depth += 1
+            continue
+        if low.startswith("</g"):
+            if stack:
+                stack.pop()
+            depth = max(0, depth - 1)
+            continue
+        a = _attrs(tag)
+        gm = cur_mat()
+        em = _mat_mul(gm, _parse_transform(a.get("transform", "")))
+        fn = _fill_is_none(a)
+        shape = []  # list of point-lists for this element
+        name = re.match(r"<(\w+)", low).group(1)
+        if name == "path" and "d" in a:
+            shape = parse_path(a["d"])
+        elif name == "circle" and "r" in a:
+            shape = _circle_poly(float(a.get("cx", 0)), float(a.get("cy", 0)), float(a["r"]))
+        elif name == "ellipse":
+            shape = _ellipse_poly(float(a.get("cx", 0)), float(a.get("cy", 0)),
+                                  float(a.get("rx", 1)), float(a.get("ry", 1)))
+        elif name == "rect":
+            x, y = float(a.get("x", 0)), float(a.get("y", 0))
+            w, h = float(a.get("width", 0)), float(a.get("height", 0))
+            shape = [[(x, y), (x+w, y), (x+w, y+h), (x, y+h)]]
+        elif name in ("polygon", "polyline") and "points" in a:
+            n = _nums(a["points"])
+            shape = [[(n[k], n[k+1]) for k in range(0, len(n)-1, 2)]]
+        for poly in shape:
+            polys.append((_apply(em, poly), fn))
     return polys
 
 
 def _viewbox(svg):
-    m = re.search(r'viewBox\s*=\s*"([^"]+)"', svg)
+    m = re.search(r'viewBox\s*=\s*(?:"([^"]+)"|\'([^\']+)\')', svg)
     if m:
-        v = _nums(m.group(1))
+        v = _nums(m.group(1) if m.group(1) is not None else m.group(2))
         if len(v) == 4:
             return v
-    wm = re.search(r'\bwidth\s*=\s*"([\d.]+)', svg)
-    hm = re.search(r'\bheight\s*=\s*"([\d.]+)', svg)
+    wm = re.search(r"\bwidth\s*=\s*['\"]([\d.]+)", svg)
+    hm = re.search(r"\bheight\s*=\s*['\"]([\d.]+)", svg)
     w = float(wm.group(1)) if wm else 24.0
     h = float(hm.group(1)) if hm else 24.0
     return [0, 0, w, h]
 
 
+def _strip_fillnone(polys):
+    """polys is list of (points, fill_none) tuples. Drop fill:none polygons, but if
+    that empties everything, keep them all + warn (full stroke rendering is out of scope)."""
+    kept = [(p, fn) for p, fn in polys if not fn]
+    if not kept and polys:
+        sys.stderr.write("WARN: all paths fill:none — filled as solid; "
+                         "trace manually for outline icons\n")
+        return [p for p, fn in polys]
+    return [p for p, fn in kept]
+
+
 def rasterize(polys, vb, grid=18, supersample=6, coverage=0.5):
-    """Even-odd scanline fill at grid*ss, then downsample by coverage -> 0/1 grid."""
+    """Even-odd scanline fill at grid*ss, then downsample by coverage -> 0/1 grid.
+
+    polys accepts either bare point-lists OR (points, fill_none) tuples; fill:none
+    polygons are skipped (see _strip_fillnone) unless that would empty the mask."""
+    # polys may be (points, fill_none) tuples (new) or bare point-lists (legacy callers)
+    if polys and isinstance(polys[0], tuple) and len(polys[0]) == 2 \
+            and isinstance(polys[0][1], bool):
+        polys = _strip_fillnone(polys)
     vx, vy, vw, vh = vb
     if vw <= 0 or vh <= 0:
         return [[0]]

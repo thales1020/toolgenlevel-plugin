@@ -3,18 +3,24 @@ EXPERIENCES library) into a valid layout cell-set. Claude makes the generative/s
 decision (where anchors go, how deep, diagonal-for-shapes, symmetric); this code only renders
 coordinates with the +0.5 alternating stagger + support cleanup. Reward via validate_prior/EDA.
 
-spec = list of [x, y, height] anchors (integer base coords). mirror=True adds h-symmetry.
+spec = list of [x, y, height] anchors (integer base coords). mirror=True adds symmetry across
+`axis` (vertical=left-right, horizontal=top-bottom). Symmetry is always MEASURED on all 4 axes
+(see geom.sym_scores) and reported — gen-layout ranks/prioritises symmetry but never forces it.
 Usage (programmatic): from claude_compose import compose; cells = compose(spec, mirror=True)
 """
 import json, sys, os, argparse
 
 
-def compose(spec, mirror=True):
+def compose(spec, mirror=True, axis="vertical", trim_mode="clean"):
+    # trim_mode (mirror=False only): "clean" drops highest exposed tops; "shallow" drops the
+    # LOWEST exposed tops first -> protects deep feature towers (region-depth beak/eye).
+    # mirror seeds the second half across the chosen axis (vertical: -x ; horizontal: -y)
     anchors = {}
     for x, y, h in spec:
         anchors[(x, y)] = max(1, int(h))
         if mirror:
-            anchors[(-x, y)] = max(anchors.get((-x, y), 1), max(1, int(h)))
+            mx, my = (-x, y) if axis == "vertical" else (x, -y)
+            anchors[(mx, my)] = max(anchors.get((mx, my), 1), max(1, int(h)))
     cells = []
     for (ax, ay), h in anchors.items():
         for L in range(h):
@@ -34,21 +40,21 @@ def compose(spec, mirror=True):
             else:
                 changed = True
         cells = keep
+    from geom import geom_symmetrize, geom_div3_trim, clean_div3_trim, clean_div3_trim_shallow
     if mirror:
         # EXACT symmetry (BUGLOG B5): the old "drop topmost-farthest" trim removed 1-2 lone cells
-        # -> "a few cells off". Re-impose geometric h-symmetry, then trim by dropping mirror PAIRS
-        # (or one axis cell for %3==1). Reuses gen_symmetric (lazy import; gen_layouts already loaded).
-        from gen_symmetric import geom_symmetrize, geom_div3_trim
-        cells = geom_div3_trim(geom_symmetrize(cells))
-        ys = [c[2] for c in cells]
-        cy = round((min(ys) + max(ys)) / 2 * 2) / 2          # axis stays at x=0; recentre y only
-        return [(L, x, round(y - cy, 2)) for (L, x, y) in cells]
-    # asymmetric / elongated (mirror=False, e.g. a tilted sword): topmost-farthest trim is fine
-    rem = len(cells) % 3
-    if rem:
-        top = max(c[0] for c in cells)
-        tops = sorted([c for c in cells if c[0] == top], key=lambda c: -(c[1] ** 2 + c[2] ** 2))
-        drop = set(id(c) for c in tops[:rem]); cells = [c for c in cells if id(c) not in drop]
+        # -> "a few cells off". Re-impose geometric symmetry on `axis`, then trim by dropping mirror
+        # PAIRS (or one on-axis cell for %3==1) so the result stays exactly symmetric.
+        cells = geom_div3_trim(geom_symmetrize(cells, axis=axis), axis=axis)
+        if axis == "vertical":
+            ys = [c[2] for c in cells]
+            cy = round((min(ys) + max(ys)) / 2 * 2) / 2      # axis stays at x=0; recentre y only
+            return [(L, x, round(y - cy, 2)) for (L, x, y) in cells]
+        xs = [c[1] for c in cells]
+        cx = round((min(xs) + max(xs)) / 2 * 2) / 2          # axis stays at y=0; recentre x only
+        return [(L, round(x - cx, 2), y) for (L, x, y) in cells]
+    # asymmetric / elongated (mirror=False, e.g. a tilted sword): drop exposed tops, no sym constraint
+    cells = clean_div3_trim_shallow(cells) if trim_mode == "shallow" else clean_div3_trim(cells)
     xs = [c[1] for c in cells]; ys = [c[2] for c in cells]
     cx = round((min(xs) + max(xs)) / 2 * 2) / 2; cy = round((min(ys) + max(ys)) / 2 * 2) / 2
     return [(L, round(x - cx, 2), round(y - cy, 2)) for (L, x, y) in cells]

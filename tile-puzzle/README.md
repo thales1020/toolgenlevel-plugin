@@ -3,7 +3,7 @@
 Claude Code plugin — a Triple Match (Tile Explorer / GD_Test) **level-design toolkit** for the team.
 
 Two skills:
-- **`gen-layout`** — create empty layout geometry (shape / icon / bulk), mobile-portrait, symmetric where appropriate.
+- **`gen-layout`** — create empty layout geometry from a shape/prose/icon, ONE symmetry-ranked layout at a time (aesthetics + 4-axis symmetry prioritised), mobile-portrait. (Bulk layout generation retired.)
 - **`tile-level-design`** — assign tiles, score difficulty, solve/verify (DFS v3), build trap / easy-layer / difficulty-targeted levels, analyze/modify/normalize, bulk test sets.
 
 Used together for image/shape → playable level.

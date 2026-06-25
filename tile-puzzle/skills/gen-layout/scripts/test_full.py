@@ -87,23 +87,30 @@ for nm, grid, depth, ku in [("circle", SF.circle(6), 3, 1.0),
     except Exception as e:
         rec("end2end", f"{nm} -> tiles -> v3-solvable", False, f"{type(e).__name__}: {e}")
 
-# ---------- D. BULK INTEGRITY (gen_layouts logic, N=30) ----------
+# ---------- D. COMPOSE + 4-AXIS SYMMETRY (the single-layout use case) ----------
 try:
-    rng = random.Random(7); kept = []; seen = set(); bad = 0
-    while len(kept) < 30 and len(seen) < 600:
-        g = SF.spaced_clusters(rng, n_clusters=rng.randint(3, 5))
-        res = GL.build_in_band(g, 4, 8, keep_upper=0.9, seed=rng.randint(1, 99999))
-        if not res: continue
-        cells, d = res; ct = [(c[0], c[1], c[2]) for c in cells]
-        sig = SF.exact_sig(ct)
-        if sig in seen: continue
-        seen.add(sig)
-        if not GL.structural_ok(ct) or len(ct) % 3 != 0: bad += 1; continue
-        kept.append((ct, d))
-    allgood = len(kept) == 30 and bad == 0 and all(4 - 0.3 <= d <= 8 + 0.3 for _, d in kept)
-    rec("bulk", "gen 30 distinct, all structural+div3+in-band", allgood, f"kept={len(kept)} bad={bad}")
+    import claude_compose as CC
+    from geom import sym_scores
+    # vertical mirror -> exact left-right symmetry, structural, div3
+    sym = CC.compose([[0, 4, 2], [1, 3, 3], [2, 2, 3], [2, 1, 2], [1, 0, 3], [0, -1, 2], [0, -3, 1]],
+                     mirror=True, axis="vertical")
+    sv = sym_scores(sym)
+    okv = (abs(sv["vertical"] - 1.0) < 1e-6 and GL.structural_ok([(c[0], c[1], c[2]) for c in sym])
+           and len(sym) % 3 == 0)
+    rec("compose", "vertical mirror -> sym=1.0 + structural + div3", okv,
+        f"vert={sv['vertical']} cells={len(sym)}")
+    # horizontal mirror -> exact top-bottom symmetry
+    fish = CC.compose([[0, 0, 2], [1, 0, 3], [2, 1, 2], [3, 0, 2], [2, -1, 2]], mirror=True, axis="horizontal")
+    sh = sym_scores(fish)
+    rec("compose", "horizontal mirror -> hsym=1.0", abs(sh["horizontal"] - 1.0) < 1e-6,
+        f"hori={sh['horizontal']}")
+    # asymmetric (no mirror) -> still valid layout, not forced symmetric
+    sw = CC.compose([[0, 5, 2], [0, 4, 2], [1, 3, 2], [0, 2, 3], [-1, 1, 2], [0, 0, 2]], mirror=False)
+    oks = GL.structural_ok([(c[0], c[1], c[2]) for c in sw]) and len(sw) % 3 == 0
+    rec("compose", "no-mirror -> valid asymmetric layout (not forced sym)", oks,
+        f"best={max(sym_scores(sw).values())} cells={len(sw)}")
 except Exception as e:
-    rec("bulk", "gen 30 distinct", False, f"{type(e).__name__}: {e}")
+    rec("compose", "compose + symmetry", False, f"{type(e).__name__}: {e}")
 
 # ---------- E. OUTPUT FORMAT (empty layout contract) ----------
 try:
