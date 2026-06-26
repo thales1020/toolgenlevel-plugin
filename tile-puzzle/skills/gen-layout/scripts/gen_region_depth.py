@@ -16,7 +16,7 @@ except Exception:
     pass
 import claude_compose as CC
 from mask_to_layout import to_stones
-from geom import sym_scores, best_axis
+from geom import sym_scores, best_axis, auto_axis
 from gen_layouts import structural_ok, layout_diff, to_board
 from tile_level_simulator import DifficultyScorer as DS
 from render_png import layout_to_png
@@ -152,11 +152,12 @@ def main():
     ap.add_argument("--cell", type=int, default=89); ap.add_argument("--n", type=int, default=13)
     ap.add_argument("--heights", default="",
                     help='override per-region tower heights, e.g. "Y:2,O:4,B:5" (default body/beak/eye)')
-    ap.add_argument("--mirror", action="store_true",
-                    help="SNAP the layout to exact symmetry on --axis (for a front-facing/symmetric "
-                         "subject). Default OFF: measure & report symmetry, do not force.")
-    ap.add_argument("--axis", choices=["vertical", "horizontal", "vh", "d4"], default="vertical",
-                    help="symmetry axes to snap when --mirror (match the subject: 1/2/4 axes).")
+    ap.add_argument("--mirror", dest="mirror", action="store_true", default=True,
+                    help="PRIORITISE symmetry (DEFAULT ON): snap to the symmetry the subject supports.")
+    ap.add_argument("--no-mirror", dest="mirror", action="store_false",
+                    help="do NOT force symmetry (for an asymmetric subject).")
+    ap.add_argument("--axis", choices=["auto", "vertical", "horizontal", "vh", "d4"], default="auto",
+                    help="auto (DEFAULT) = detect the subject's natural axes; or force 1/2/4 axes.")
     ap.add_argument("--auto", action="store_true",
                     help="auto-detect grid geometry (x0/y0/cell/n) from the image — best-effort; "
                          "VERIFY via _<name>_regions.png, override with explicit --x0/--y0/--cell/--n.")
@@ -179,16 +180,23 @@ def main():
 
     spec = [[i, -j, heights[grid[j][i]]] for j in range(len(grid)) for i in range(len(grid[0]))
             if grid[j][i] in heights]
-    # trim_mode="shallow" PROTECTS the deep beak/eye towers (trim a shallow body edge instead of the
-    # deepest tops). For vh/d4, build unmirrored then snap the symmetry group.
-    if a.mirror and a.axis in ("d4", "vh"):
-        from geom import d4_symmetrize, vh_symmetrize
-        raw = CC.compose(spec, mirror=False, trim_mode="shallow")
-        cells = d4_symmetrize(raw) if a.axis == "d4" else vh_symmetrize(raw)
-    elif a.mirror:
-        cells = CC.compose(spec, mirror=True, axis=a.axis)
+    # trim_mode="shallow" PROTECTS the deep beak/eye towers (trim a shallow body edge, not the deepest
+    # tops). Then PRIORITISE symmetry: auto-detect the subject's natural axes and snap that group.
+    raw = CC.compose(spec, mirror=False, trim_mode="shallow")
+    if a.mirror:
+        from geom import d4_symmetrize, vh_symmetrize, geom_symmetrize, geom_div3_trim
+        axis = auto_axis(sym_scores(raw)) if a.axis == "auto" else a.axis
+        if axis == "d4":
+            cells = d4_symmetrize(raw)
+        elif axis == "vh":
+            cells = vh_symmetrize(raw)
+        elif axis in ("vertical", "horizontal"):
+            cells = geom_div3_trim(geom_symmetrize(raw, axis=axis), axis=axis)
+        else:
+            cells = raw                               # asymmetric subject -> not forced
+        print(f"symmetry axis: {a.axis} -> {axis}")
     else:
-        cells = CC.compose(spec, mirror=False, trim_mode="shallow")
+        cells = raw
     ok = structural_ok([(c[0], c[1], c[2]) for c in cells])
     d = layout_diff(cells)
     nlay = max(c[0] for c in cells) + 1

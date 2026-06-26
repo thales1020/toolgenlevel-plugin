@@ -50,27 +50,32 @@ cannot take "make a sword"). Code only renders coordinates + measures symmetry d
 > layers, mobile-portrait aspect ~0.88). A detailed/complex picture **cannot** be reproduced
 > faithfully: reduce it to a **low-res recognizable silhouette**, drop small features, accept "reads
 > like the idea" over pixel-faithful. Then: build a 2D mask → **verify the FLAT silhouette reads** →
-> `python ${CLAUDE_SKILL_DIR}/scripts/gen_shape_layout.py --mask m.txt --name duck --layers 5 [--target 180] [--mirror] [--min-sym 0.8]`.
+> `python ${CLAUDE_SKILL_DIR}/scripts/gen_shape_layout.py --mask m.txt --name duck --layers 5 [--target 180]`.
 > It **auto-runs the complexity gate** (`evaluate_icon`) and **warns when over budget** (>~48
 > footprints / aspect >1.1 → simplify); defaults to **EVEN** depth (`--mound` = central mound);
-> **MEASURES symmetry on 4 axes**, and `--mirror --axis …` snaps to score **1.00** (`--min-sym`
-> gates). Emits `_<name>_flat.png` (silhouette review) + `_<name>_stack.png`. See EXPERIENCES [8].
+> emits `_<name>_flat.png` (silhouette review) + `_<name>_stack.png`. See EXPERIENCES [8].
 > Use bare `compose()` only for abstract/non-pictorial specs.
 >
-> **MATCH THE SOURCE OBJECT'S SYMMETRY (do this for every image):** first COUNT how many reflection
-> axes the object in the image has, then build a layout with the SAME symmetry via `--mirror --axis`:
+> **SYMMETRY IS PRIORITISED BY DEFAULT — you do NOT pass a flag for it.** `--mirror` is ON by default
+> with `--axis auto`: the script measures the shape's natural reflection axes and **snaps the largest
+> group it supports** (≥0.75 per axis) → that group's axes read exactly **1.00**. **Per-layer AND
+> coverage symmetry are guaranteed for free** (the geometric cell-mirror keeps the layer index, so each
+> layer is individually symmetric and the fully-covered / fully-visible cell sets are symmetric too).
+> A circle → `auto:d4`, a heart → `auto:vertical`, a sword → `auto:none` (genuinely asymmetric, not
+> forced). What `auto` picks per shape:
 >
-> | Object reflection axes | Example | Flag |
+> | Natural reflection axes | Example | auto picks |
 > |---|---|---|
-> | **0** (asymmetric / directional) | sword, key, animal facing a way | `--no-mirror` (measure only) |
-> | **1** vertical (left–right) | shield, heart, cup, front-facing face | `--mirror --axis vertical` |
-> | **1** horizontal (top–bottom) | a fish in side view, a boat | `--mirror --axis horizontal` |
-> | **2** (L-R **and** T-B) | ellipse, eye, rounded rectangle | `--mirror --axis vh` |
-> | **4** (vert+hori+both diagonals, D4) | square decorative tile, mandala, flower medallion, snowflake | `--mirror --axis d4` |
+> | **0** (asymmetric / directional) | sword, key, animal facing a way | `none` — not forced (or pass `--no-mirror`) |
+> | **1** vertical (left–right) | shield, heart, cup, front-facing face | `vertical` |
+> | **1** horizontal (top–bottom) | a fish in side view, a boat | `horizontal` |
+> | **2** (L-R **and** T-B) | ellipse, eye, rounded rectangle | `vh` |
+> | **4** (vert+hori+both diagonals, D4) | circle, square tile, mandala, flower medallion, snowflake | `d4` |
 >
-> `vh`/`d4` union the symmetry orbit then orbit-repair support + div3 → that group's axes all read
-> **1.00**, valid & playable. (Odd-fold symmetry — a 3- or 5-pointed star — doesn't map to the square
-> grid; pick the nearest of the above, usually `d4` or `vertical`.)
+> Override with `--axis vertical|horizontal|vh|d4` to force a group, or `--no-mirror` to leave it
+> unsnapped. `--min-sym` still gates. `vh`/`d4` union the symmetry orbit then orbit-repair support +
+> div3 → valid & playable. (Odd-fold symmetry — a 3-/5-pointed star — doesn't map to the square grid;
+> auto falls back to the nearest of the above or `none`.)
 
 Claude authors the layout spec, code renders it:
 

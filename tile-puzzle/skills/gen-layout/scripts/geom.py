@@ -60,6 +60,23 @@ def best_axis(cells):
     return ax, sc[ax]
 
 
+def auto_axis(scores, thr=0.75):
+    """Pick the LARGEST reflection group the shape NATURALLY supports (so we prioritise symmetry
+    without forcing it onto a genuinely asymmetric shape). Returns 'd4' / 'vh' / 'vertical' /
+    'horizontal' / 'none'. `scores` = sym_scores of the un-snapped cells; thr = "supports this axis"."""
+    v = scores["vertical"]; h = scores["horizontal"]
+    d1 = scores["diag_main"]; d2 = scores["diag_anti"]
+    if min(v, h, d1, d2) >= thr:
+        return "d4"
+    if v >= thr and h >= thr:
+        return "vh"
+    if v >= thr:
+        return "vertical"
+    if h >= thr:
+        return "horizontal"
+    return "none"
+
+
 def geom_sym_frac(cells):
     """Back-compat: vertical-axis symmetry fraction (left-right mirror)."""
     return sym_scores(cells)["vertical"]

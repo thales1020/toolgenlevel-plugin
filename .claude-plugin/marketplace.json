@@ -9,7 +9,7 @@
       "name": "tile-puzzle",
       "source": "./tile-puzzle",
       "description": "Triple Match level-design toolkit: gen-layout (one symmetry-ranked layout from shape/icon/image, simplify-first, match source axes) + tile-level-design (assign tiles, score difficulty, solve/verify, traps).",
-      "version": "0.2.0",
+      "version": "0.2.1",
       "author": {
         "name": "ToolGenLevel team"
       }

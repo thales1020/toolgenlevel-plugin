@@ -21,7 +21,7 @@ from maskio import load_mask
 import layout_builder as LB
 from mask_to_layout import to_stones, center
 from geom import (geom_symmetrize, geom_div3_trim, clean_div3_trim, d4_symmetrize, vh_symmetrize,
-                  sym_scores, best_axis)
+                  sym_scores, best_axis, auto_axis)
 from gen_layouts import structural_ok, layout_diff, to_board
 from tile_level_simulator import DifficultyScorer as DS
 from render_png import layout_to_png
@@ -114,14 +114,17 @@ def main():
                     help="concentrate hidden layers in a central MOUND (capped_inset). "
                          "DEFAULT is EVEN depth across the whole shape (uniform_stagger) — "
                          "user preference: prioritize even layers (raise --target if too shallow).")
-    ap.add_argument("--mirror", action="store_true",
-                    help="SNAP to exact symmetry on --axis (geometric cell-mirror). Use for a shape "
-                         "you know is symmetric (shield/heart/cup): fixes the +0.5 stagger's residual "
-                         "asymmetry to score 1.00. Default OFF: measure & report, do not force (B-audit).")
-    ap.add_argument("--axis", choices=["vertical", "horizontal", "vh", "d4"], default="vertical",
-                    help="match the SOURCE object's reflection axes: vertical=1 axis L-R (default), "
-                         "horizontal=1 axis T-B, vh=2 axes (L-R + T-B, 4 quadrants), d4=4 axes "
-                         "(square/mandala — vert+hori+both diagonals all =1.00).")
+    ap.add_argument("--mirror", dest="mirror", action="store_true", default=True,
+                    help="PRIORITISE symmetry (DEFAULT ON): snap to the symmetry the shape supports. "
+                         "Per-layer + coverage symmetry come for free (geometric cell-mirror keeps the "
+                         "layer index). Symmetric layouts score 1.00 on their group's axes.")
+    ap.add_argument("--no-mirror", dest="mirror", action="store_false",
+                    help="do NOT force symmetry — for genuinely asymmetric/elongated shapes (sword, "
+                         "key, arrow). Just measures & reports symmetry.")
+    ap.add_argument("--axis", choices=["auto", "vertical", "horizontal", "vh", "d4"], default="auto",
+                    help="auto (DEFAULT) = detect the shape's natural reflection axes and snap that "
+                         "group (asymmetric shapes fall back to no-force); or force one: vertical=1 "
+                         "axis L-R, horizontal=1 axis T-B, vh=2 axes, d4=4 axes (square/mandala).")
     ap.add_argument("--min-sym", type=float, default=0.0,
                     help="if >0, warn (exit 2) when the best of the 4 symmetry axes < this — lets "
                          "you re-trace or add --mirror. 0 = report only (never forces).")
@@ -166,12 +169,20 @@ def main():
     # CENTER FIRST so the symmetry axis passes through 0 (build emits x=0..W, all positive).
     cells = center([list(c) for c in cells])
     tcells = [(c[0], c[1], c[2]) for c in cells]
-    if a.mirror and a.axis == "d4":
-        tcells = d4_symmetrize(tcells)                # all 4 reflection axes -> 1.00 (valid, div3)
-    elif a.mirror and a.axis == "vh":
-        tcells = vh_symmetrize(tcells)                # 2 orthogonal axes -> 1.00 (4 quadrants)
-    elif a.mirror:
-        tcells = geom_div3_trim(geom_symmetrize(tcells, axis=a.axis), axis=a.axis)
+    axis = a.axis; chosen_note = ""
+    if a.mirror:
+        if axis == "auto":                            # PRIORITISE symmetry: snap the group the shape supports
+            axis = auto_axis(sym_scores(tcells))      # ('d4'/'vh'/'vertical'/'horizontal'/'none')
+            chosen_note = f"  [auto:{axis}]"
+        if axis == "d4":
+            tcells = d4_symmetrize(tcells)            # all 4 reflection axes -> 1.00 (valid, div3)
+        elif axis == "vh":
+            tcells = vh_symmetrize(tcells)            # 2 orthogonal axes -> 1.00 (4 quadrants)
+        elif axis in ("vertical", "horizontal"):
+            tcells = geom_div3_trim(geom_symmetrize(tcells, axis=axis), axis=axis)
+        else:                                         # "none" -> shape isn't symmetric; don't force
+            tcells = clean_div3_trim(tcells)
+            chosen_note = "  [auto:none — asymmetric, not forced]" if a.axis == "auto" else ""
     else:
         tcells = clean_div3_trim(tcells)
     cells = center([list(c) for c in tcells])
@@ -197,7 +208,7 @@ def main():
     print(f"   total={len(cells)} layers={nlay} cover100={cov} ({cov/len(cells):.3f}) "
           f"diff={d:.2f} ok={ok}")
     sym_str = "  ".join(f"{k[:4]}={v:.2f}" for k, v in scores.items())
-    print(f"   symmetry: {sym_str}  -> best {bax}={bscore:.2f}" + ("  [mirrored]" if a.mirror else ""))
+    print(f"   symmetry: {sym_str}  -> best {bax}={bscore:.2f}{chosen_note}")
     print(f"   flat review: _{a.name}_flat.png   stacked: _{a.name}_stack.png")
     if a.min_sym > 0 and bscore < a.min_sym:
         print(f"   WARNING: best symmetry {bscore:.2f} < --min-sym {a.min_sym:.2f} — "

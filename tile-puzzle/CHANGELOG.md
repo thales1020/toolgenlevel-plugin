@@ -1,5 +1,13 @@
 # Changelog — tile-puzzle
 
+## 0.2.1
+
+- **Symmetry is now the PRIORITISED DEFAULT** (`gen_shape_layout` / `gen_region_depth`): `--mirror` is
+  ON by default with `--axis auto` — the script measures the shape's natural reflection axes and snaps
+  the largest group it supports (circle→d4, heart→vertical, sword→none/not-forced). This fixes the
+  intermittent "a circle sometimes came out not symmetric" — symmetry no longer depends on remembering
+  a flag. Per-layer and coverage symmetry are guaranteed by construction. `--no-mirror` opts out.
+
 ## 0.2.0
 
 gen-layout overhaul: aesthetics + symmetry first, image pipeline hardened.
