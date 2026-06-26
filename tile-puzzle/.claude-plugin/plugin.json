@@ -1,7 +1,7 @@
 {
   "name": "tile-puzzle",
   "description": "Triple Match (Tile Explorer / GD_Test) level-design toolkit. Skill gen-layout creates one symmetry-ranked empty layout from a shape/icon/image (simplifies complex art, matches the source's reflection axes); skill tile-level-design assigns tiles, scores difficulty, and solves/verifies levels. Use together for image-to-playable-level.",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "author": {
     "name": "ToolGenLevel team"
   }

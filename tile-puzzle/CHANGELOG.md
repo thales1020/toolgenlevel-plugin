@@ -1,5 +1,14 @@
 # Changelog — tile-puzzle
 
+## 0.3.1
+
+- **`tile-level-design/scripts/solve_special.py`** (`solve_v3_special`) — a v3 DFS that models special
+  AUTO-CLEAR: bonus/mission tiles stay in the board as covers and clear for free the moment they're
+  exposed (cascading), match-3 branches over normal tiles only. This is the RIGOROUS solvability check
+  that replaces the 0.3.0 shortcut (which excluded specials from the solve). `reserve_special.py` now
+  verifies on the FULL board via `solve_v3_special`. The engine `verify_smart_v3.py` is unchanged
+  (byte-identical / parity-locked) — the auto-clear solver lives in the skill's scripts/.
+
 ## 0.3.0
 
 Special cells (stack / bonus / mission / mark) + exact game-format export. All OPTIONAL.

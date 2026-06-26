@@ -12,9 +12,9 @@ How: the engine's binder SKIPS any cell whose tile_id is already >=0 (`_bind_ran
 to -1, and TEEngine.generate fills only the rest with match-3. We trim the match-3 remainder to ÷3,
 loop seeds for a v3-solvable match-3, then attach the special tiles' render size `s`.
 
-Solvability: v3 is checked on the MATCH-3 tiles (the special cells are removed for the solve — they
-auto-clear for free when exposed, so the match-3 board is the real game). This guarantees the playable
-(match-3) part is ÷3-balanced and clearable.
+Solvability: v3 (RIGOROUS) is checked on the FULL board via solve_special.solve_v3_special — the
+special cells STAY as covers and auto-clear only when exposed, so the forced order they impose is
+accounted for. (0.3.0 used a shortcut that excluded specials from the solve; 0.3.1 keeps them.)
 
 These tiles are OPTIONAL — only run this when the design asks for bonus/mission tiles.
 
@@ -25,8 +25,9 @@ Usage:
 import sys, os, json, argparse, random
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(os.path.dirname(HERE), "engine"))
+sys.path.insert(0, HERE)
 from tile_level_simulator import load_board_from_file, TEEngine, DifficultyScorer, Board, Layer, Cell
-from verify_smart_v3 import solve_v3
+from solve_special import solve_v3_special
 
 WEIGHTS = json.load(open(os.path.join(os.path.dirname(HERE), "engine", "scoring_weights.json"), encoding="utf-8"))
 
@@ -108,12 +109,15 @@ def main():
         flags = eng._compute_knob_flags(board, eff_cc)
         eng._bind_random(match3_cells, pool, eff_cc, flags)
         eng._fix_x3_distribution(match3_cells, eff_cc)
-        # 4. verify v3 on the MATCH-3 board (specials excluded; they auto-clear for free on exposure)
-        m3 = _match3_board(board, special_ids)
-        if solve_v3(m3, 200_000)[0] is not True:
+        # 4. verify v3 with special AUTO-CLEAR on the FULL board — RIGOROUS: the specials stay in the
+        #    board as covers (they auto-clear only when exposed), so the forced-order they impose is
+        #    accounted for (not the 0.3.0 shortcut that excluded them).
+        sids = tuple(special_ids)
+        if solve_v3_special(board, special_ids=sids, max_expansions=200_000)[0] is not True:
             continue
-        if solve_v3(m3, 2_000_000)[0] is not True:
+        if solve_v3_special(board, special_ids=sids, max_expansions=2_000_000)[0] is not True:
             continue
+        m3 = _match3_board(board, special_ids)          # score the match-3 difficulty on the match-3 set
         # optional score band (scored on the match-3 board)
         sc = DifficultyScorer.compute_full_score(m3, WEIGHTS); fs = sc["final_score"]
         if (a.smin is not None and fs < a.smin) or (a.smax is not None and fs > a.smax):
@@ -136,7 +140,7 @@ def main():
         print(f"-> {out}")
         print(f"   {kind} id={a.id}: reserved {a.n}  | match-3 tiles={total - a.n - len(dropped)} "
               f"(÷3, v3-solvable, score={fs:.1f})  | trimmed {len(dropped)} for %3  | seed={seed}")
-        print("   special tiles auto-clear on exposure; v3 verified on the match-3 board.")
+        print("   v3 verified on the FULL board with special AUTO-CLEAR (specials kept as covers).")
         return 0
     print(f"no v3-solvable match-3 found in {a.seeds} seeds — raise --seeds or adjust knobs.")
     return 1

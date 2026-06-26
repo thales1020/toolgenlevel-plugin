@@ -275,7 +275,7 @@ engine/           — tile_level_simulator.py + verify_smart_v3.py + solve_path.
 templates/        — find_*.py + gen_*.py (22 gen/sweep scripts)
 sample_layouts/   — 120 empty layout JSON (NewLayout_L3..L120 + Clover/SKY/Smiley)
 scripts/          — analyze_level.py, batch_normalize.py, open_any_level.py, export_trap.py,
-                    reserve_special.py, add_special_cells.py, export_game_format.py (special cells §23)
+                    reserve_special.py, solve_special.py, add_special_cells.py, export_game_format.py (special cells §23)
 data/             — difficulty_minmax*.csv, layout_strategy_analysis.csv
 docs/             — CLAUDE.md (hard reqs), LEVEL_DESIGN_GUIDE.md
 example_levels/   — reference good levels (trap_an_L20_s82, etc.)
@@ -436,8 +436,10 @@ correct step and stage — NEVER mix them into base gen (keeps the v3 solver on 
 
 Key rule: **bonus/mission are reserved BEFORE match-3 is assigned**, never retyped onto a finished
 level (retyping a match-3 cell unbalances its type → breaks solvability). `reserve_special` pre-sets N
-cells to the special id, assigns match-3 to the REST (trimmed to ÷3), and verifies v3 on the match-3
-board (specials auto-clear free). Position can be random — a solvable level exposes every cell.
+cells to the special id, assigns match-3 to the REST (trimmed to ÷3), and verifies solvability with
+`scripts/solve_special.py` (`solve_v3_special`) — a v3 DFS that keeps the specials in the board as
+covers and AUTO-CLEARS them when exposed (rigorous; the engine v3 stays byte-identical). Position can
+be random — a solvable level exposes every cell.
 
 **Final step — match the game format exactly:** the generators emit a `metadata` block; the game
 LEVEL format is `{group,tiles,layers,stacks,bg,bgm,sl,dif}` (no metadata; `sl=2`,`dif=1` constant).
