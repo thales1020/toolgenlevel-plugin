@@ -1,5 +1,24 @@
 # Changelog — tile-puzzle
 
+## 0.3.0
+
+Special cells (stack / bonus / mission / mark) + exact game-format export. All OPTIONAL.
+
+- **`gen-layout/scripts/add_stacks.py`** — add straight-stack columns (`stacks:[{x,y,d}]`) to an empty
+  layout as a GEOMETRY step (before tiles). Pattern placement (edge/ring/corners) and SYMMETRY-
+  preserving (detect the layout's group, place full mirror orbits, re-impose symmetry → stays 1.00).
+- **`tile-level-design/scripts/reserve_special.py`** — reserve BONUS (`1001`) / MISSION (`1002`) tiles
+  the correct way: these are NON-match-3 slots that auto-clear when uncovered (`total − count(special)`
+  is ÷3 in 100% of reference files). Pre-sets N cells to the special id, assigns match-3 to the REST
+  (trimmed to ÷3), verifies v3-solvable on the match-3 board. (NOT a post-tile retype — that breaks
+  solvability.)
+- **`tile-level-design/scripts/add_special_cells.py`** — slimmed to the `m:true` MARK overlay on
+  normal tiles (post-tile; the mission part moved to reserve_special).
+- **`tile-level-design/scripts/export_game_format.py`** — export to the exact game LEVEL format
+  `{group,tiles,layers,stacks,bg,bgm,sl,dif}` (drops `metadata`; `sl=2`,`dif=1` constant). Verified
+  byte-shape-identical to the reference Mission/Bonus files. Run as the final step.
+- SKILL docs: gen-layout file-tree + tile-level-design §23 "Special cells".
+
 ## 0.2.1
 
 - **Symmetry is now the PRIORITISED DEFAULT** (`gen_shape_layout` / `gen_region_depth`): `--mirror` is

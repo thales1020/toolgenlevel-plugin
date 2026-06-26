@@ -207,6 +207,8 @@ gen-layout/
                                (--auto grid detect · --heights · --axis vertical|horizontal|vh|d4 · deep-tower-safe trim)
     gen_soda_cup_cov.py     <- hit an exact cover100 % (e.g. 50/75% completely covered) via 2-phase tuner [EXP 11]
     symmetrize_layout.py    <- enforce exact symmetry on an existing layout (geom-mirror)
+    add_stacks.py           <- OPTIONAL: add straight-stack columns (pattern edge/ring/corners,
+                               symmetry-preserving) to an empty layout — GEOMETRY step, BEFORE tiles
     validate_layout.py      <- structural validity check
     render_png.py           <- optional visualization
     clone_layout.py         <- copy + resize/reshape a reference board
