@@ -1,5 +1,11 @@
 # Changelog — tile-puzzle
 
+## 0.3.2
+
+- **`tile-level-design/scripts/test_special_solver.py`** — regression test locking the special-tile
+  solver's soundness: auto-clear semantics (special covers below + clears free when exposed), reduction
+  (matches engine `solve_v3` on no-special boards), and end-to-end reserve verification. 6/6 PASS.
+
 ## 0.3.1
 
 - **`tile-level-design/scripts/solve_special.py`** (`solve_v3_special`) — a v3 DFS that models special
