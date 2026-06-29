@@ -3,12 +3,18 @@
 Works EVERYWHERE (incl. claude.ai web sandbox) — unlike the tkinter PlayWindow which
 needs a display. Sandbox writes the .html, user downloads + opens in any browser.
 
-Faithful to game rules:
+Faithful to game rules (normal match-3):
   - pickable = no ACTIVE tile in a HIGHER layer overlaps (|dx|<1 and |dy|<1)
   - pick -> tray; 3 same type in tray auto-clears
   - game over: tray length >= 7 AND no type has count >= 3
   - win: all tiles cleared
   - display label = tile_id + 1
+
+SPECIAL tiles (optional, auto-detected — match the simulator's solve_v3_special model):
+  - BONUS (i=1001) / MISSION (i=1002): NON-match-3 covers. They never enter the tray; they
+    AUTO-CLEAR for free (cascading) the instant nothing in a higher layer covers them.
+  - MYSTERY (m:true): a NORMAL match-3 tile that is face-DOWN to the player — shown as "?"
+    until it becomes pickable, then it reveals its real type. Plays as a normal tile.
 
 Usage: python make_play_html.py <level.json> [out.html]
 """
@@ -22,18 +28,35 @@ OUT = sys.argv[2] if len(sys.argv) > 2 else os.path.splitext(os.path.basename(LE
 with open(LEVEL, encoding="utf-8") as f:
     data = json.load(f)
 
-# Flatten stones -> [{id,x,y,layer,tid}]
+# Flatten stones -> [{id,x,y,layer,tid,special,mystery}]
+#   special = 1001/1002 (None for normal); for specials tid is irrelevant.
+#   mystery = True for normal tiles flagged m:true (face-down).
 tiles = []
 tid_seq = 0
+n_special = n_mystery = 0
 for layer in sorted(data["layers"], key=lambda l: l["index"]):
     li = layer["index"]
     for s in layer["stones"]:
-        tiles.append({"id": tid_seq, "x": float(s["x"]), "y": float(s["y"]),
-                      "layer": li, "tid": int(s.get("i", 0))})
+        i = int(s.get("i", 0))
+        is_special = i >= 1001
+        mystery = bool(s.get("m")) and not is_special
+        if is_special:
+            n_special += 1
+        if mystery:
+            n_mystery += 1
+        tiles.append({"id": tid_seq, "x": float(s["x"]), "y": float(s["y"]), "layer": li,
+                      "tid": (0 if is_special else i - 1),
+                      "special": (i if is_special else 0), "mystery": mystery})
         tid_seq += 1
 
 meta = data.get("metadata", {})
-title = f"{meta.get('layout','Level')} · diff {meta.get('difficulty','?')} · {len(tiles)} tiles"
+extra = []
+if n_special:
+    extra.append(f"{n_special} special")
+if n_mystery:
+    extra.append(f"{n_mystery} mystery")
+suffix = ("  ·  " + " · ".join(extra)) if extra else ""
+title = f"{meta.get('layout','Level')} · {len(tiles)} tiles{suffix}"
 
 SYMBOLS = "★♥♦♣♠✿❀☀☂☃⚓⚡✈✚✪❄✦❁♛♞♫✓✶❖♨①②③④⑤⑥⑦⑧⑨⑩"
 PALETTE = ["#e74c3c","#3498db","#2ecc71","#f39c12","#9b59b6","#1abc9c","#e67e22",
@@ -54,6 +77,10 @@ html = """<!DOCTYPE html>
  .tile.pick{cursor:pointer}
  .tile.pick:hover{transform:scale(1.06);filter:brightness(1.15)}
  .tile.cover{filter:brightness(.45)}
+ .tile.bonus{border-radius:50%;background:#f1c40f!important;color:#7a5d00;border-color:#b8860b}
+ .tile.mission{background:#e84393!important;color:#fff;border-color:#a82a6a;border-radius:10px}
+ .tile.mystery{background:#555!important;color:#bbb;border-style:dashed}
+ .tile.special{box-shadow:0 0 8px 2px rgba(255,255,255,.25)}
  #tray{margin:10px auto;display:flex;gap:6px;justify-content:center;min-height:46px;align-items:center}
  .slot{width:40px;height:40px;border-radius:6px;background:#222;border:1px dashed #555;
    display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:bold;color:#fff}
@@ -61,6 +88,8 @@ html = """<!DOCTYPE html>
  button{background:#444;color:#eee;border:0;padding:8px 14px;border-radius:6px;margin:3px;cursor:pointer;font-size:13px}
  button:hover{background:#555}button:disabled{opacity:.4;cursor:default}
  #stats{font-size:12px;color:#aaa}
+ #legend{font-size:11px;color:#999;padding:2px 8px 8px}
+ #legend b{color:#ccc}
 </style></head><body>
 <h1>__TITLE__</h1>
 <div id="msg"></div>
@@ -73,12 +102,13 @@ html = """<!DOCTYPE html>
  <button id="restartBtn">⟲ Restart</button>
 </div>
 <div id="stats"></div>
+<div id="legend"></div>
 <script>
 const TILES = __TILES__;
 const SYMBOLS = __SYMBOLS__;
 const PALETTE = __PALETTE__;
 const TRAY_MAX_BASE = 7;
-let state, traySize, buffs, history;
+let state, traySize, buffs, history, tray;
 
 function init(){
   state = TILES.map(t=>({...t, active:true}));
@@ -86,10 +116,10 @@ function init(){
   buffs = {shuffle:3, undo:3, slot:1};
   history = [];
   tray = [];
+  autoClearSpecials();          // any special that starts uncovered clears immediately
   render();
   setMsg("");
 }
-let tray = [];
 
 function overlaps(a,b){ return Math.abs(a.x-b.x)<1.0 && Math.abs(a.y-b.y)<1.0; }
 function isPickable(t){
@@ -98,6 +128,16 @@ function isPickable(t){
     if(o.active && o.layer>t.layer && overlaps(o,t)) return false;
   }
   return true;
+}
+// BONUS/MISSION auto-clear (cascading) the moment nothing covers them — never enter the tray.
+function autoClearSpecials(){
+  let changed=true;
+  while(changed){
+    changed=false;
+    for(const t of state){
+      if(t.active && t.special && isPickable(t)){ t.active=false; changed=true; }
+    }
+  }
 }
 function setMsg(m,c){ const e=document.getElementById('msg'); e.textContent=m; e.style.color=c||'#eee'; }
 
@@ -119,10 +159,19 @@ function render(){
     d.style.top=((maxY-t.y)*S+pad)+'px';
     d.style.width=(S-6)+'px'; d.style.height=(S-6)+'px';
     d.style.zIndex=t.layer+1;
-    d.style.background=PALETTE[t.tid%PALETTE.length];
-    d.textContent=SYMBOLS[t.tid%SYMBOLS.length]||(t.tid+1);
-    d.title='type '+(t.tid+1)+'  L'+t.layer;
-    if(pick) d.onclick=()=>pick_tile(t);
+    if(t.special===1001){
+      d.classList.add('special','bonus'); d.textContent='🎁'; d.title='BONUS (auto-clear khi lộ) L'+t.layer;
+    } else if(t.special===1002){
+      d.classList.add('special','mission'); d.textContent='🎯'; d.title='MISSION (auto-clear khi lộ) L'+t.layer;
+    } else if(t.mystery && !pick){
+      d.classList.add('mystery'); d.textContent='?'; d.title='MYSTERY (úp mặt) L'+t.layer;
+    } else {
+      d.style.background=PALETTE[t.tid%PALETTE.length];
+      d.textContent=SYMBOLS[t.tid%SYMBOLS.length]||(t.tid+1);
+      d.title=(t.mystery?'mystery → ':'')+'type '+(t.tid+1)+'  L'+t.layer;
+      if(t.mystery) d.style.outline='2px dashed #ddd';
+    }
+    if(pick && !t.special) d.onclick=()=>pick_tile(t);
     board.appendChild(d);
   }
   // tray
@@ -134,15 +183,22 @@ function render(){
     tr.appendChild(s);
   }
   const left=state.filter(t=>t.active).length;
-  document.getElementById('stats').textContent=`Còn ${left} tiles · tray ${tray.length}/${traySize}`;
+  const spLeft=state.filter(t=>t.active&&t.special).length;
+  document.getElementById('stats').textContent=
+    `Còn ${left} tiles`+(spLeft?` (${spLeft} special)`:``)+` · tray ${tray.length}/${traySize}`;
+  document.getElementById('legend').innerHTML=
+    `<b>🎁</b> bonus &nbsp; <b>🎯</b> mission — tự biến mất khi không còn ô che &nbsp;|&nbsp; <b>?</b> mystery — úp mặt tới khi mở được`;
   document.getElementById('shuffleBtn').disabled=buffs.shuffle<=0;
   document.getElementById('undoBtn').disabled=buffs.undo<=0||history.length===0;
   document.getElementById('slotBtn').disabled=buffs.slot<=0;
 }
 
+function snapshot(){ return {active:state.map(t=>t.active), tray:[...tray]}; }
+function restore(h){ state.forEach((t,i)=>t.active=h.active[i]); tray=[...h.tray]; }
+
 function pick_tile(t){
-  if(!isPickable(t)) return;
-  history.push({tileId:t.id, traySnapshot:[...tray]});
+  if(t.special || !isPickable(t)) return;
+  history.push(snapshot());
   t.active=false;
   tray.push(t.tid);
   // auto-clear triples
@@ -155,6 +211,7 @@ function pick_tile(t){
       counts[k]-=3;
     }
   }
+  autoClearSpecials();          // removing this tile may uncover specials -> cascade clear
   render();
   checkEnd();
 }
@@ -170,12 +227,13 @@ function disableAll(){ document.querySelectorAll('.tile').forEach(e=>e.onclick=n
 document.getElementById('restartBtn').onclick=init;
 document.getElementById('slotBtn').onclick=()=>{ if(buffs.slot>0){buffs.slot--;traySize++;render();} };
 document.getElementById('undoBtn').onclick=()=>{
-  if(buffs.undo>0 && history.length){ const h=history.pop(); const t=state.find(s=>s.id===h.tileId);
-    t.active=true; tray=h.traySnapshot; buffs.undo--; render(); setMsg(""); }
+  if(buffs.undo>0 && history.length){ restore(history.pop()); buffs.undo--; render(); setMsg(""); }
 };
 document.getElementById('shuffleBtn').onclick=()=>{
   if(buffs.shuffle<=0) return; buffs.shuffle--;
-  const act=state.filter(t=>t.active); const ids=act.map(t=>t.tid);
+  // shuffle only the NORMAL (non-special) active tiles' types — specials/mystery-ness stay put
+  const act=state.filter(t=>t.active && !t.special);
+  const ids=act.map(t=>t.tid);
   for(let i=ids.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[ids[i],ids[j]]=[ids[j],ids[i]];}
   act.forEach((t,i)=>t.tid=ids[i]); render();
 };
@@ -191,5 +249,6 @@ with open(OUT, "w", encoding="utf-8") as f:
     f.write(html)
 
 print(f"SAVED {OUT}  ({os.path.getsize(OUT)} bytes)")
-print(f"  {len(tiles)} tiles, {len(set(t['tid'] for t in tiles))} types")
+print(f"  {len(tiles)} tiles, {len(set(t['tid'] for t in tiles if not t['special']))} normal types"
+      f"{f', {n_special} special, {n_mystery} mystery' if (n_special or n_mystery) else ''}")
 print(f"  Open in any browser to play. Shareable single file.")

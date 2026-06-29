@@ -431,8 +431,8 @@ correct step and stage — NEVER mix them into base gen (keeps the v3 solver on 
 | Special | What (reverse-engineered) | Stage | Tool |
 |---|---|---|---|
 | **STACK** | straight vertical pile (same x,y all layers, no +0.5 stagger); registered in `stacks:[{x,y,d}]` | GEOMETRY — **before tiles** | `gen-layout/scripts/add_stacks.py` (pattern + symmetric) |
-| **BONUS `1001`** (round) / **MISSION `1002`** | a NON-match-3 reserved slot that AUTO-CLEARS when uncovered. `total − count(special)` is ÷3 in 100% of reference files → the match-3 pool EXCLUDES these slots | reserve **at tile-assignment** | `scripts/reserve_special.py --id 1001\|1002 --n N` |
-| **MARK `m:true`** | a flag on a NORMAL match-3 tile (early levels) | **after tiles** | `scripts/add_special_cells.py --mark N` |
+| **BONUS `1001`** (round) / **MISSION `1002`** | a NON-match-3 reserved slot that AUTO-CLEARS when uncovered. `total − count(special)` is ÷3 in 100% of reference files → the match-3 pool EXCLUDES these slots. Render `s`: bonus always **1.5**; mission VARIED (default per-tile MIXED 0.6/0.9/1.2, the L30-120 style) | reserve **at tile-assignment** | `scripts/reserve_special.py --bonus N --mission M` (combine both in one pass; `--id/--n` legacy single; `--size` overrides all) |
+| **MYSTERY `m:true`** | a NORMAL match-3 tile that is FACE-DOWN to the player — colour FIXED at design time, only hidden visually. Plays as a normal tile (L*M reference boards stay ÷3 WITH mystery tiles counted) → no effect on geometry/balance/solvability. Reference: 3-5 per level | **after tiles** | `scripts/add_special_cells.py --mystery N` (omit N → random 3-5; `--mark` is a kept alias) |
 
 Key rule: **bonus/mission are reserved BEFORE match-3 is assigned**, never retyped onto a finished
 level (retyping a match-3 cell unbalances its type → breaks solvability). `reserve_special` pre-sets N
@@ -441,13 +441,18 @@ cells to the special id, assigns match-3 to the REST (trimmed to ÷3), and verif
 covers and AUTO-CLEARS them when exposed (rigorous; the engine v3 stays byte-identical). Position can
 be random — a solvable level exposes every cell.
 
+**Mystery (`m:true`) needs NO re-verify**: it is a normal match-3 tile that is merely face-down to the
+player (fixed colour, hidden visually), so it cannot change a level's solvability. Add it LAST, after
+the level is already solvable, with `add_special_cells.py --mystery N` (default random 3-5).
+
 **Final step — match the game format exactly:** the generators emit a `metadata` block; the game
 LEVEL format is `{group,tiles,layers,stacks,bg,bgm,sl,dif}` (no metadata; `sl=2`,`dif=1` constant).
 Run `scripts/export_game_format.py <level.json>` last → byte-shape-identical to the reference files.
 
 ```bash
-# image → bonus level, game-ready:
+# image → level with bonus + mission + mystery, game-ready:
 python ${CLAUDE_SKILL_DIR}/../gen-layout/scripts/add_stacks.py NewLayout_x.json --n 4 --out x_stk.json   # optional
-python ${CLAUDE_SKILL_DIR}/scripts/reserve_special.py x_stk.json --id 1001 --n 4 --color-count 12 --out lvl.json
-python ${CLAUDE_SKILL_DIR}/scripts/export_game_format.py lvl.json --out lvl_game.json
+python ${CLAUDE_SKILL_DIR}/scripts/reserve_special.py x_stk.json --bonus 4 --mission 3 --color-count 12 --out lvl.json
+python ${CLAUDE_SKILL_DIR}/scripts/add_special_cells.py lvl.json --mystery 4 --out lvl_m.json   # optional, post-tile
+python ${CLAUDE_SKILL_DIR}/scripts/export_game_format.py lvl_m.json --out lvl_game.json
 ```

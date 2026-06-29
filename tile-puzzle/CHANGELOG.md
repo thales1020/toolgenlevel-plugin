@@ -1,5 +1,28 @@
 # Changelog — tile-puzzle
 
+## 0.3.3
+
+- **MYSTERY tile (`m:true`) formalised.** Confirmed from the `NewLayout_L*M` reference set: a mystery
+  tile is a NORMAL match-3 tile that is merely FACE-DOWN to the player — colour fixed at design time,
+  hidden only visually. Every reference board stays ÷3 WITH mystery tiles counted, so it changes
+  nothing about geometry, match-3 balance, or solvability (no solver work needed — unlike bonus/mission).
+  `tile-level-design/scripts/add_special_cells.py` now exposes `--mystery N` (canonical; `--mark` kept
+  as alias) and defaults to a random 3-5 tiles (the reference convention) when no count is given. Added
+  as the LAST post-tile step; no re-verify required. SKILL §23 updated.
+- **`reserve_special.py` can combine bonus + mission in ONE level.** New `--bonus N` / `--mission M`
+  flags reserve both special types in a single pass (running the old `--id/--n` twice would wipe the
+  first via `clear_tiles()`); both kept out of the match-3 pool, verified together with
+  `solve_v3_special(special_ids=(1001,1002))`. Legacy `--id/--n` still works.
+- **Reference-accurate special render sizes.** Reverse-engineered `s` from the BonusLevel + MissionTile
+  sets: BONUS (1001) is always **1.5** (or absent) — fixed. MISSION (1002) is **varied** — early/mid
+  levels (L30-120) MIX a small base (0.6, sometimes 0.55) with occasional larger accents (0.9, rarely
+  1.2) within one level; late levels (L130-300) are uniform 0.7. `reserve_special` now emits bonus 1.5
+  and per-tile MIXED mission sizes by default (the L30-120 style); `--size` still overrides all.
+- **`make_play_html.py` models specials.** The browser player now faithfully renders bonus/mission as
+  non-pickable covers that AUTO-CLEAR (cascading) when uncovered, and mystery tiles face-DOWN (`?`)
+  until pickable — matching `solve_v3_special`. Undo now snapshots the full board so special cascades
+  restore correctly. Normal levels are unaffected (no `i>=1001` / `m`).
+
 ## 0.3.2
 
 - **`tile-level-design/scripts/test_special_solver.py`** — regression test locking the special-tile
