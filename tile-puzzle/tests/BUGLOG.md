@@ -99,14 +99,10 @@ loại vật thể trước**:
 → Tóm: fix compose = (1) bước phân-loại symmetry từ prose; (2) nhánh đối xứng dùng geom-trim; (3) nhánh dài
 dùng diagonal-tilt (đồng thời lo aspect B4).
 
-## Open question (PARKED — user đang suy nghĩ, CHƯA quyết)
-**Có nên "bật advisor" không?** — tức gắn một bước **review/verify bằng reviewer mạnh hơn** vào workflow
-skill (self-check trước khi giao output).
-- *Vì sao nổi lên:* B1–B3 là model fresh **bịa script sai** rồi vẫn chạy/giao; một bước advisor có thể bắt
-  trước khi ship (best-practices: "validate before deliver / feedback loop").
-- *Đánh đổi cần cân:* chất lượng↑ vs chi phí token + độ trễ mỗi lần gen; và advisor kiểm *thiết kế/suy luận*,
-  không thay được test thật.
-- *Quyết sau:* để user cân, chưa làm gì.
+## Open question — ĐÃ QUYẾT: KHÔNG dùng advisor (2026-06-23)
+**Có nên "bật advisor"?** → **Không.** Không gắn bước advisor/review-bằng-reviewer vào workflow skill.
+(Lý do cân nhắc lúc trước: chất lượng↑ nhưng tốn token + độ trễ mỗi lần gen, và advisor kiểm *thiết kế*
+chứ không thay test thật — B6 là minh chứng: chỉ `claude plugin validate` mới bắt, advisor thì không.)
 
 ## Thêm bug? Ghi tiếp xuống dưới
 - (chờ user test thêm)

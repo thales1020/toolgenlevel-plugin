@@ -17,9 +17,33 @@ Usage (programmatic):
 """
 import sys, os, time
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "engine"))
-from verify_smart_v3 import build_bitmask_visibility
+from verify_smart_v3 import build_bitmask_visibility  # noqa: F401  (kept for reduction cross-checks)
 
 TRAY_SIZE = 7
+
+
+def _build_visibility_2x2(cells, sset):
+    """Visibility with the special COLLISION model: a NORMAL tile is 1×1 (half 0.5), a SPECIAL
+    (bonus/mission) is a 2×2 object (half 1.0). An upper cell blocks a lower one iff their footprints
+    overlap: |dx| < halfA+halfB & |dy| < halfA+halfB  (partial overlap counts). So normal↔normal = 1.0
+    (identical to the engine — no-special boards are unchanged), special↔normal = 1.5, special↔special
+    = 2.0. Matches make_play_html's `halfOf(t)=t.special?1.0:0.5`."""
+    n = len(cells)
+    blocked_by = [0] * n
+    blocks = [0] * n
+    half = [1.0 if c.tile_id in sset else 0.5 for c in cells]
+    for i in range(n):
+        ci = cells[i]
+        for j in range(n):
+            if i == j:
+                continue
+            cj = cells[j]
+            if cj.layer_idx > ci.layer_idx:
+                thr = half[i] + half[j]
+                if abs(cj.x - ci.x) < thr and abs(cj.y - ci.y) < thr:
+                    blocked_by[i] |= 1 << j
+                    blocks[j] |= 1 << i
+    return blocked_by, blocks
 
 
 class _CapHit(Exception):
@@ -40,7 +64,7 @@ def solve_v3_special(board, special_ids=(1001, 1002), max_expansions=None, verbo
     tile_ids = [(-1 if is_special[i] else raw[i]) for i in range(n)]
     norm = [t for t in tile_ids if t >= 0]
     n_types = (max(norm) + 1) if norm else 1
-    blocked_by, blocks = build_bitmask_visibility(cells)
+    blocked_by, blocks = _build_visibility_2x2(cells, sset)   # specials collide as 2×2 (see helper)
 
     def tray_count(tray, t): return (tray >> (t * 2)) & 3
     def tray_add(tray, t):   return tray + (1 << (t * 2))

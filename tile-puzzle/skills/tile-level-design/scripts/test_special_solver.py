@@ -15,7 +15,7 @@ sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(os.path.dirname(HERE), "engine"))
 from tile_level_simulator import Board, Layer, Cell, TEEngine, load_board_from_file
 from verify_smart_v3 import solve_v3
-from solve_special import solve_v3_special
+from solve_special import solve_v3_special, _build_visibility_2x2
 
 R = []
 def check(name, ok, note=""):
@@ -102,6 +102,27 @@ try:
           solve_v3_special(empty, max_expansions=300_000)[0] is True)
 except Exception as ex:
     check("end-to-end reserve", False, f"{type(ex).__name__}: {ex}")
+
+print("D. 2x2 special collision (special = 2x2 half 1.0; normal = 1x1 half 0.5):")
+SIDS = {1001, 1002}
+# D1: a higher tile 1.2 away (the EDGE of the special's 2x2) COVERS the special -> it is NOT exposed
+cs = mk([(0, 0, 0, 1001), (1, 1.2, 0, 0)]).all_cells()
+bb, _ = _build_visibility_2x2(cs, SIDS)
+si = next(i for i, c in enumerate(cs) if c.tile_id == 1001)
+check("special covered by a tile 1.2 away (its 2x2 edge) -> blocked, won't auto-clear", bb[si] != 0)
+# D1 control: the SAME geometry but the low cell is a NORMAL (1x1) -> a tile 1.2 away does NOT block it
+cs2 = mk([(0, 0, 0, 5), (1, 1.2, 0, 0)]).all_cells()
+bb2, _ = _build_visibility_2x2(cs2, SIDS)
+ni2 = next(i for i, c in enumerate(cs2) if c.layer_idx == 0)
+check("control: a NORMAL 1x1 is NOT blocked by a tile 1.2 away", bb2[ni2] == 0)
+# D2: a special COVERS a normal 1.2 away in its 2x2 -> that normal is blocked (not pickable) while present
+cs3 = mk([(1, 0, 0, 1002), (0, 1.2, 0, 0)]).all_cells()
+bb3, _ = _build_visibility_2x2(cs3, SIDS)
+nlow = next(i for i, c in enumerate(cs3) if c.tile_id == 0)
+check("special covers a normal 1.2 away in its 2x2 -> normal blocked", bb3[nlow] != 0)
+# D3: a special is exposed only when NOTHING is on its whole 2x2 (a lone special auto-clears -> solvable)
+check("lone special (nothing above its 2x2) auto-clears -> solvable",
+      V(mk([(0, 0, 0, 1001)])) is True)
 
 npass = sum(1 for _, ok, _ in R if ok)
 print(f"\n{npass}/{len(R)} PASS")

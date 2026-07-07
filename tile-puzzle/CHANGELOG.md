@@ -1,5 +1,44 @@
 # Changelog — tile-puzzle
 
+## 0.4.0
+
+- **New skill `display-json-level`.** Renders a Tile Explorer level JSON into a self-contained,
+  browser-playable single-file HTML (works everywhere incl. the claude.ai web sandbox). Read-only
+  display — does not change the JSON. It references the `tile-level-design` renderer rather than
+  duplicating assets.
+- **`make_play_html.py` now renders REAL ART.** A random tilebase plate per level + Group_1 tile faces
+  (a face per distinct type; a raw id matching a Group_1 filename uses that exact sprite). Bonus draws
+  as a **circle**, mission as a **rounded square**, mystery **face-down** until pickable. Cells are
+  SQUARE and a special renders at its exact **2×2 footprint** (so a bonus is a true circle and the frame
+  equals what it blocks — no decorative overhang). Only images actually used are embedded (base64) so
+  files stay small; falls back to coloured squares if assets are missing. Art bundled at
+  `tile-level-design/assets/` (`tile_faces/` from Group_1, `tilebase/`).
+- **Collision model: normals 1×1, SPECIALS 2×2.** A normal tile is a 1×1 unit (engine / Unity
+  `IsCanPickUp` `|dx|<1 & |dy|<1`). A special (bonus/mission) is a **2×2 object** — it covers / is
+  covered by its whole 2×2 footprint (partial overlap counts), so it auto-clears only when the ENTIRE
+  2×2 is clear on top (not just its centre) and its render exactly matches what it blocks (visual =
+  logic).
+- **Solver aligned to the 2×2 special model.** `solve_special.py` now builds a special-aware visibility
+  (`_build_visibility_2x2`): an upper cell blocks a lower one iff their footprints overlap
+  `|dx| < halfA+halfB` with half = 1.0 for a special / 0.5 for a normal (normal↔normal = 1.0 —
+  identical to the engine, so no-special boards are unchanged and the reduction property holds;
+  special↔normal = 1.5, special↔special = 2.0). The player, `solve_v3_special`, and `reserve_special`
+  now agree exactly (cross-checked: pickable + special-covered-at-start match on real levels). This
+  resolves the earlier 1×1/2×2 pending caveat. `test_special_solver.py` gains a 2×2-semantics group
+  (10/10 PASS incl. reduction 12/12).
+- **`reserve_special.py` rewritten — direction C (specials are ADDED, never reserve a cell).** The old
+  version retyped a normal cell to 1001/1002 (wrong: it consumed a match-3 slot and mis-placed the
+  special). The reference data proves specials are ADDITIONAL interstitial covers over a COMPLETE ÷3
+  normal board. New algorithm: assign a full v3-solvable normal level → renumber normals onto EVEN
+  layers → place each special on the ODD layer between, at a **2×2 centre** (half-integer x,y) chosen so
+  a higher normal still covers it at start (so it does NOT auto-clear immediately). No normal is removed
+  (match-3 stays ÷3). HARD-verified: `solve_v3_special` True, every special covered at start, normals ÷3.
+  This fixes the special visual/collision mismatch at the source — the big 2.4× frame now sits exactly
+  on the 2×2 it covers. `--bonus/--mission` (and legacy `--id/--n`) unchanged.
+- **`display-json-level` SKILL.md** gains an authoritative "Overlap / stacking rule" section (unit-square
+  1×1 collision, render size is decorative, `compute_coverage` 0–4 is scoring-only and NOT pickability,
+  mis-placement is the failure mode not the rule) — traced to engine `_build_visibility` / Unity IsCanPickUp.
+
 ## 0.3.3
 
 - **MYSTERY tile (`m:true`) formalised.** Confirmed from the `NewLayout_L*M` reference set: a mystery
