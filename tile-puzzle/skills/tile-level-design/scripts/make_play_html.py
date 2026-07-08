@@ -13,8 +13,9 @@ Faithful to game rules (normal match-3):
 SPECIAL tiles (auto-detected — match the simulator's solve_v3_special model):
   - BONUS (i=1001) / MISSION (i=1002): NON-match-3 covers. Never enter the tray; AUTO-CLEAR
     for free (cascading) the instant nothing in a higher layer covers them.
-  - MYSTERY (m:true): a NORMAL match-3 tile face-DOWN to the player; shown as the mystery cover
-    art until pickable, then it reveals its real face. Plays as a normal tile.
+  - MYSTERY (m:true) / CLOUD (o:[1]): a NORMAL match-3 tile shown under the mystery cover art until
+    pickable, then it reveals its real face and plays as a normal tile. (Cloud's cover clears
+    mission-style = the instant it is uncovered = pickable.)
 
 REAL ART (play-test only — the level JSON is NOT changed):
   If the bundled assets are present (../assets/tile_faces from Group_1, ../assets/tilebase), each
@@ -35,23 +36,28 @@ OUT = sys.argv[2] if len(sys.argv) > 2 else os.path.splitext(os.path.basename(LE
 with open(LEVEL, encoding="utf-8") as f:
     data = json.load(f)
 
-# ---- flatten stones -> [{id,x,y,layer,tid,special,mystery}] ----
+# ---- flatten stones -> [{id,x,y,layer,tid,special,mystery,cloud}] ----
+# MYSTERY (`m:true`) and CLOUD (`o:[1]`) are both NORMAL tiles shown under the same tile_cover_mystery
+# art until pickable (cloud's cover clears mission-style = the instant it's uncovered = pickable).
 tiles = []
 tid_seq = 0
-n_special = n_mystery = 0
+n_special = n_mystery = n_cloud = 0
 for layer in sorted(data["layers"], key=lambda l: l["index"]):
     li = layer["index"]
     for s in layer["stones"]:
         i = int(s.get("i", 0))
         is_special = i >= 1001
         mystery = bool(s.get("m")) and not is_special
+        cloud = (1 in s.get("o", [])) and not is_special       # o:[1] = cloud (0 = mystery, future)
         if is_special:
             n_special += 1
         if mystery:
             n_mystery += 1
+        if cloud:
+            n_cloud += 1
         tiles.append({"id": tid_seq, "x": float(s["x"]), "y": float(s["y"]), "layer": li,
                       "tid": (0 if is_special else i - 1),
-                      "special": (i if is_special else 0), "mystery": mystery,
+                      "special": (i if is_special else 0), "mystery": mystery, "cloud": cloud,
                       "s": float(s.get("s", 0))})
         tid_seq += 1
 
@@ -102,6 +108,8 @@ if n_special:
     extra.append(f"{n_special} special")
 if n_mystery:
     extra.append(f"{n_mystery} mystery")
+if n_cloud:
+    extra.append(f"{n_cloud} cloud")
 suffix = ("  ·  " + " · ".join(extra)) if extra else ""
 title = f"{meta.get('layout','Level')} · {len(tiles)} tiles{suffix}"
 
@@ -212,19 +220,23 @@ function styleTile(d, t, pick){
     d.title=(t.special===1001?'BONUS (tròn)':'MISSION (vuông)')+' — auto-clear khi hết ô che, L'+t.layer;
     d.appendChild(face); return;
   }
-  // NORMAL / MYSTERY: tilebase plate under a Group_1 face
+  // MYSTERY / CLOUD while COVERED: the cover art is a WHOLE-tile image → fill the whole tile with it
+  // (no base plate, no small inner face). When it becomes pickable the cover is REMOVED and the tile
+  // shows its real face underneath (the tile itself stays — only the cover layer clears).
+  const covered=(t.mystery||t.cloud) && !pick;
+  if(covered){
+    if(HAS_ART && ART.mystery){ d.style.backgroundImage='url('+ART.mystery+')'; }
+    else { d.classList.add('noart'); d.style.background='#5a5a5a'; face.textContent='?'; d.appendChild(face); }
+    d.title=(t.cloud?'CLOUD':'MYSTERY')+' (lớp che — dọn ô trên để lộ) L'+t.layer;
+    return;
+  }
+  // NORMAL / revealed: tilebase plate under a Group_1 face
   if(HAS_ART && ART.base){ d.style.backgroundImage='url('+ART.base+')'; }
   else { d.classList.add('noart'); d.style.background=PALETTE[t.tid%PALETTE.length]; }
-  if(t.mystery && !pick){
-    if(HAS_ART && ART.mystery){ face.style.backgroundImage='url('+ART.mystery+')'; }
-    else { face.textContent='?'; }
-    d.title='MYSTERY (úp mặt) L'+t.layer;
-  } else {
-    const f=faceOf(t.tid);
-    if(HAS_ART && f){ face.style.backgroundImage='url('+f+')'; }
-    else { face.textContent=SYMBOLS[t.tid%SYMBOLS.length]||(t.tid+1); }
-    d.title=(t.mystery?'mystery → ':'')+'type '+(t.tid+1)+'  L'+t.layer;
-  }
+  const f=faceOf(t.tid);
+  if(HAS_ART && f){ face.style.backgroundImage='url('+f+')'; }
+  else { face.textContent=SYMBOLS[t.tid%SYMBOLS.length]||(t.tid+1); }
+  d.title=((t.mystery||t.cloud)?(t.cloud?'cloud → ':'mystery → '):'')+'type '+(t.tid+1)+'  L'+t.layer;
   d.appendChild(face);
 }
 
@@ -282,7 +294,7 @@ function render(){
   document.getElementById('stats').textContent=
     `Còn ${left} tiles`+(spLeft?` (${spLeft} special)`:``)+` · tray ${tray.length}/${traySize}`;
   document.getElementById('legend').innerHTML=
-    `<b>🎁</b> bonus &nbsp; <b>🎯</b> mission — tự biến mất khi không còn ô che &nbsp;|&nbsp; ô úp = mystery`;
+    `<b>🎁</b> bonus &nbsp; <b>🎯</b> mission — tự biến mất khi không còn ô che &nbsp;|&nbsp; ô úp = mystery / cloud (o:[1])`;
   document.getElementById('shuffleBtn').disabled=buffs.shuffle<=0;
   document.getElementById('undoBtn').disabled=buffs.undo<=0||history.length===0;
   document.getElementById('slotBtn').disabled=buffs.slot<=0;
@@ -344,7 +356,8 @@ with open(OUT, "w", encoding="utf-8") as f:
 
 print(f"SAVED {OUT}  ({os.path.getsize(OUT)} bytes)")
 print(f"  {len(tiles)} tiles, {len(set(t['tid'] for t in tiles if not t['special']))} normal types"
-      f"{f', {n_special} special, {n_mystery} mystery' if (n_special or n_mystery) else ''}")
+      f"{f', {n_special} special' if n_special else ''}{f', {n_mystery} mystery' if n_mystery else ''}"
+      f"{f', {n_cloud} cloud' if n_cloud else ''}")
 print(f"  real art: {'YES' if HAS_ART else 'NO (fallback colours)'}"
       f"{' — tilebase + '+str(len(art['faces']))+' faces embedded' if HAS_ART else ''}")
 print(f"  Open in any browser to play. Shareable single file.")

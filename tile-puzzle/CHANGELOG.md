@@ -1,5 +1,27 @@
 # Changelog — tile-puzzle
 
+## 0.5.0
+
+- **New CLOUD tile (`o:[1]`).** A NORMAL match-3 tile (real colour, matchable, counts ÷3) carrying an
+  extra stone field `"o":[1]`, covered by the `tile_cover_mystery` art; the cover clears MISSION-STYLE
+  — the instant nothing on a higher layer overlaps it (= when it becomes pickable) — revealing the real
+  face. NO solvability impact (the solver ignores `o`). The `o` value encodes type: 1=cloud (0=mystery,
+  a future variant).
+  - **`tile-level-design/scripts/add_cloud.py`** (post-tile overlay, like add_special_cells): marks
+    normal tiles as clouds on the BOTTOM layer(s) 0-1 only (never the top — a cloud must start covered),
+    100% covered-at-start, as a SYMMETRIC region (auto-detected axis, ≥ vertical), ~33% of tiles by
+    default (`--cloud-pct` / `--cloud N`, `--axis`, `--layers`). Reproduces the reference stats
+    (game-data/CloudTile: 23-47% of tiles, layers 0-1, all covered, symmetric).
+  - **Candidate cells must be COVERED *and* VISIBLE (peek)** — no tile directly on top (within 0.5) —
+    so the cover actually shows. Cloud levels therefore REQUIRE a **STAGGERED layout** (gen-layout
+    default `uniform_stagger`); on a COLUMNAR layout every bottom cell is fully hidden and add_cloud
+    places 0 (it logs the shortfall + suggests a staggered layout rather than burying clouds).
+  - **`make_play_html.py`** renders a cloud (and mystery) with the cover art filling the WHOLE tile
+    (was a small 78% badge on a base plate); when it becomes pickable only the COVER clears, revealing
+    the real Group_1 face — the tile itself stays and plays as a normal match-3 tile.
+  - **`export_game_format.py`** preserves `o` (stone fields i,x,y,s,m,o copied as-is).
+  - SKILL §23 documents CLOUD (incl. the staggered-layout requirement).
+
 ## 0.4.3
 
 - **`reserve_special` — AUTO-MIX footprints by default.** `--mission N` / `--bonus N` with NO
