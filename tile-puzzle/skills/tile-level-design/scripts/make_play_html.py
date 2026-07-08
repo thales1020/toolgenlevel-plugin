@@ -94,17 +94,33 @@ if face_files and base_pool:
         art["mystery"] = _datauri(mystery_png)
     if os.path.exists(cloud_png):
         art["cloud"] = _datauri(cloud_png)
-    # map each distinct normal tile-type to a face; embed only the ones used.
-    # Prefer the EXACT sprite when the tile's raw id (tid+1) matches a Group_1 filename — real
-    # reference levels use real sprite ids (85,142-170) so they render authentically; generated
-    # levels (i=1,2,3...) have no match and fall back to a shuffled arbitrary face.
+    # Map each distinct tile-TYPE to a DISTINCT face sprite (INJECTIVE — two different types must NEVER
+    # share a sprite, or they'd look identical yet never match). Prefer the EXACT sprite when the tile's
+    # raw id (tid+1) matches a Group_1 filename (real reference levels use ids 85,142-170 → render true);
+    # every other type takes an UNUSED shuffled sprite so no sprite is reused (until types > sprites).
     face_by_id = {int(os.path.splitext(os.path.basename(p))[0]): p
                   for p in face_files if os.path.splitext(os.path.basename(p))[0].isdigit()}
     distinct = sorted({t["tid"] for t in tiles if not t["special"]})
     pool = face_files[:]
     rng.shuffle(pool)
-    for k, tid in enumerate(distinct):
-        p = face_by_id.get(tid + 1) or pool[k % len(pool)]
+    assigned = {}
+    used = set()
+    for tid in distinct:                       # pass 1: exact-id sprites, claim them
+        p = face_by_id.get(tid + 1)
+        if p is not None and p not in used:
+            assigned[tid] = p
+            used.add(p)
+    avail = [p for p in pool if p not in used]
+    ai = 0
+    for tid in distinct:                        # pass 2: remaining types get an UNUSED sprite each
+        if tid in assigned:
+            continue
+        if ai < len(avail):
+            p = avail[ai]; ai += 1
+        else:                                   # more types than sprites — reuse is unavoidable, cycle
+            p = pool[len(assigned) % len(pool)]
+        assigned[tid] = p
+    for tid, p in assigned.items():
         art["faces"][str(tid)] = _datauri(p)
 
 HAS_ART = bool(art["base"] and art["faces"])
@@ -191,11 +207,11 @@ function init(){
 
 // Collision half-extent (grid units): a NORMAL tile is 1x1 (half 0.5). A SPECIAL is a 2x2 (half 1.0)
 // OR 3x3 (half 1.5) object, read from its render size `s`: MISSION 0.7=2x2 / 1.0=3x3 (s>=0.85 -> 3x3);
-// BONUS 1.0=2x2 / 1.5=3x3 (s>=1.25 -> 3x3). A special covers / is covered by its WHOLE footprint, so it
+// BONUS 0.9=2x2 / 1.4=3x3 (s>=1.15 -> 3x3). A special covers / is covered by its WHOLE footprint, so it
 // only auto-clears when that whole footprint is clear on top. Footprints overlap iff |dx| < ha+hb.
 function specHalf(t){
   const s = t.s || 0;
-  if(t.special===1001) return s >= 1.25 ? 1.5 : 1.0;   // bonus coin
+  if(t.special===1001) return s >= 1.15 ? 1.5 : 1.0;   // bonus coin
   return s >= 0.85 ? 1.5 : 1.0;                         // mission tile (1002)
 }
 function halfOf(t){ return t.special ? specHalf(t) : 0.5; }

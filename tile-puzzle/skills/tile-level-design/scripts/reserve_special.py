@@ -6,7 +6,7 @@ Reverse-engineered from the BonusLevel + MissionTile reference data:
     interstitial positions, and they never consume a normal cell.
   - A special is a cover whose FOOTPRINT is a 2×2 (collision half 1.0, centre on a half-integer) OR a
     3×3 (half 1.5, centre on an integer) — encoded by the stone's `s` (mission 0.7=2×2/1.0=3×3, bonus
-    1.0=2×2/1.5=3×3). It covers the tiles under its footprint and auto-clears once nothing covers IT.
+    0.9=2×2/1.4=3×3). It covers the tiles under its footprint and auto-clears once nothing covers IT.
     It need NOT fully cover the footprint (partial is fine) and must stay WITHIN the layout bounds.
 
 Algorithm:
@@ -39,8 +39,8 @@ from solve_special import solve_v3_special, footprint_half
 WEIGHTS = json.load(open(os.path.join(os.path.dirname(HERE), "engine", "scoring_weights.json"), encoding="utf-8"))
 
 # FOOTPRINT ⇄ render-size `s` (the stone's `s` encodes the special's coverage size):
-#   2×2 (collision half 1.0, centre on a HALF-integer): mission s=0.7, bonus s=1.0
-#   3×3 (collision half 1.5, centre on an INTEGER):      mission s=1.0, bonus s=1.5
+#   2×2 (collision half 1.0, centre on a HALF-integer): mission s=0.7, bonus s=0.9
+#   3×3 (collision half 1.5, centre on an INTEGER):      mission s=1.0, bonus s=1.4
 # The player + solver read the footprint back from `s` via solve_special.footprint_half.
 _COVER_HALF = {"2x2": 1.0, "3x3": 1.5}
 
@@ -58,8 +58,8 @@ def _emit_s(sid, half):
     """The render `s` to write for a special of this id + footprint half (inverse of footprint_half)."""
     big = half >= 1.5
     if sid == 1001:
-        return 1.5 if big else 1.0
-    return 1.0 if big else 0.7
+        return 1.4 if big else 0.9      # bonus: 0.9=2×2, 1.4=3×3
+    return 1.0 if big else 0.7          # mission: 0.7=2×2, 1.0=3×3
 
 
 def _covered(c, cells):
@@ -193,7 +193,7 @@ def main():
     ap.add_argument("--mission", type=int, default=0, help="how many MISSION (1002) tiles to add")
     ap.add_argument("--size", type=float, default=None,
                     help="render size 's' OVERRIDE for ALL specials (else derived from the cover footprint: "
-                         "mission 2x2=0.7/3x3=1.0, bonus 2x2=1.0/3x3=1.5). s ALSO encodes the footprint.")
+                         "mission 2x2=0.7/3x3=1.0, bonus 2x2=0.9/3x3=1.4). s ALSO encodes the footprint.")
     ap.add_argument("--mission-cover", choices=("2x2", "3x3"), default=None,
                     help="footprint for --mission N. Omit = AUTO-MIX 2x2+3x3 (n//2 are 3x3); or force uniform 2x2/3x3")
     ap.add_argument("--bonus-cover", choices=("2x2", "3x3"), default=None,
@@ -201,8 +201,8 @@ def main():
     # explicit per-footprint counts — MIX 2x2 and 3x3 specials in one level (add on top of --mission/--bonus)
     ap.add_argument("--mission-2x2", type=int, default=0, help="mission tiles with a 2x2 footprint (s=0.7)")
     ap.add_argument("--mission-3x3", type=int, default=0, help="mission tiles with a 3x3 footprint (s=1.0)")
-    ap.add_argument("--bonus-2x2", type=int, default=0, help="bonus tiles with a 2x2 footprint (s=1.0)")
-    ap.add_argument("--bonus-3x3", type=int, default=0, help="bonus tiles with a 3x3 footprint (s=1.5)")
+    ap.add_argument("--bonus-2x2", type=int, default=0, help="bonus tiles with a 2x2 footprint (s=0.9)")
+    ap.add_argument("--bonus-3x3", type=int, default=0, help="bonus tiles with a 3x3 footprint (s=1.4)")
     ap.add_argument("--color-count", type=int, default=10)
     ap.add_argument("--distance", type=int, default=2)
     ap.add_argument("--seeds", type=int, default=40, help="seeds to try")

@@ -31,12 +31,12 @@ TRAY_SIZE = 7
 def footprint_half(sid, s):
     """Special collision half-extent from its render `s` (2×2 → 1.0, 3×3 → 1.5).
     MISSION (1002): s = 0.7 → 2×2, s = 1.0 → 3×3  (threshold s ≥ 0.85 → 3×3).
-    BONUS   (1001): s = 1.0 → 2×2, s = 1.5 → 3×3  (threshold s ≥ 1.25 → 3×3).
+    BONUS   (1001): s = 0.9 → 2×2, s = 1.4 → 3×3  (threshold s ≥ 1.15 → 3×3).
     None / unknown → 2×2 (half 1.0). Shared with make_play_html's JS `specHalf` and reserve_special."""
     if s is None:
         return 1.0
     if sid == 1001:
-        return 1.5 if s >= 1.25 else 1.0
+        return 1.5 if s >= 1.15 else 1.0
     return 1.5 if s >= 0.85 else 1.0
 
 

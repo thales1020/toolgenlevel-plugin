@@ -1,5 +1,23 @@
 # Changelog — tile-puzzle
 
+## 0.5.3
+
+- **Fixed the 3-tiles-do-not-match display bug.** Two DIFFERENT tile types could be drawn with the SAME
+  Group_1 face sprite (looked identical but never matched). make_play_html now maps types to sprites
+  INJECTIVELY: exact-id sprites are claimed first, every other type takes an UNUSED sprite. Affected 11
+  reference levels mixing in-range (85,142-170) and out-of-range tile ids; 0 collisions after the fix.
+- **Re-audited solvability with the special tiles.** An independent player-mechanic DFS (footprint-aware
+  pickability + special auto-clear + tray-7 match) AGREES with solve_v3_special on 6/6 levels
+  (bonus/mission mix, cloud, mystery, combined, reference) — no player/solver divergence. cloud/mystery
+  are plain match-3 tiles (o/m display-only): per-type divisible-by-3 and solvability unchanged.
+
+## 0.5.2
+
+- **BONUS render-size `s` remapped**: bonus 2×2 = **0.9** (was 1.0), 3×3 = **1.4** (was 1.5); read-back
+  threshold `s ≥ 1.15 → 3×3`. Collision footprints unchanged (half 1.0 / 1.5). Updated in lock-step across
+  `reserve_special._emit_s`, `solve_special.footprint_half`, `make_play_html.specHalf` + SKILL §23.
+  Mission unchanged (0.7 / 1.0).
+
 ## 0.5.1
 
 - **MYSTERY tile moved to the `o:[0]` format + reveal-on-pick.** The mystery marker is now `o:[0]` (the
