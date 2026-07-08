@@ -1,5 +1,39 @@
 # Changelog — tile-puzzle
 
+## 0.4.1
+
+- **Special FOOTPRINT is now 2×2 OR 3×3, driven by the stone's `s`** (unified across player, solver,
+  and generator): **mission `0.7` = 2×2 / `1.0` = 3×3; bonus `1.0` = 2×2 / `1.5` = 3×3** (2×2 = collision
+  half 1.0, centre on a half-integer; 3×3 = half 1.5, centre on an integer). A normal tile stays 1×1.
+  - `make_play_html.py`: `specHalf(t)` reads the footprint from `s`; the special renders at exactly that
+    footprint (2 or 3 cells) so visual = collision.
+  - `solve_special.py`: `_build_visibility_2x2` takes a `special_halves` map `{(x,y,layer): half}`
+    (Cell is `__slots__`-locked); `footprint_half(sid, s)` is the shared s→half rule. Reduction preserved.
+  - `reserve_special.py`: `--mission-cover {2x2,3x3}` / `--bonus-cover {2x2,3x3}` (default 2x2); places a
+    special only where its whole footprint fits **within the layout bounds** and covers ≥1 tile (partial
+    cover allowed — no longer requires a full cluster); emits the matching `s`; verifies footprint-aware.
+  - Cross-checked player == solver (pickable + covered-at-start) on mixed 2×2/3×3 levels;
+    `test_special_solver.py` 14/14 (adds a 3×3 group; reduction 12/12).
+  - display-json-level SKILL.md overlap section updated with the s→footprint table.
+- **Mixed footprints + overlapping specials STACK on distinct layers.** `reserve_special` gains
+  `--mission-2x2/--mission-3x3/--bonus-2x2/--bonus-3x3` to MIX 2×2 and 3×3 specials in one level, and
+  specials MAY now overlap. Fix: two OVERLAPPING specials no longer land on the same interstitial layer
+  (which made neither cover the other, so a lower one auto-cleared while an overlapping special still sat
+  on it) — `_find_placements` offers every valid interstitial layer and the assignment forces overlapping
+  specials onto DISTINCT layers, so the higher genuinely covers the lower. The covered-at-start gate now
+  counts a higher SPECIAL as a cover too (a lower special in a stack is covered by the one above; the top
+  of each stack still needs a normal). Verified: mixed 5-special level → 0 same-layer overlaps, 0 specials
+  auto-clear at start, solvable, normals ÷3.
+- **Specials placed OFFSET (straddling), not snug in a cluster.** `_find_placements` now draws centres
+  from a 0.5 grid (neat cluster centres AND ~½-cell-offset ones) and PREFERS the offset positions —
+  scored by a "straddle" count (cells whose centre lies in the footprint's outer band, i.e. only ~half
+  covered). So a mission/bonus sits shifted ~½ a cell and MANY normals each cover only half of it (it
+  peeks out around them, like the real game) instead of nesting exactly on a 2×2/3×3 cluster. Ordering:
+  highest interstitial layer (visible) → most straddle (offset) → fewest coverers. All invariants kept
+  (within bounds, covered-at-start, overlapping specials stack on distinct layers, normals ÷3, solvable).
+  Demo: each special ends up with ~4 half-covering normals (vs 0 for a neat placement); player == solver
+  123/123, covered-at-start 3/3.
+
 ## 0.4.0
 
 - **New skill `display-json-level`.** Renders a Tile Explorer level JSON into a self-contained,

@@ -174,13 +174,16 @@ function init(){
   setMsg("");
 }
 
-// COVER uses the standard 1-cell rule for EVERY tile (incl. specials): a tile is covered only by a
-// higher tile whose grid cell overlaps it (|dx|<1 & |dy|<1). Specials RENDER big (decorative) but
-// only BLOCK the cells they truly sit on — otherwise a big frame would falsely cover far tiles.
-// Collision half-extent (grid units): a NORMAL tile is 1x1 (half 0.5); a SPECIAL is a 2x2 object
-// (half 1.0) — it covers/ is-covered-by its whole 2x2 footprint, so it only auto-clears when the ENTIRE
-// 2x2 is clear on top (not just its centre). Footprints overlap iff |dx| < ha+hb (partial overlap counts).
-function halfOf(t){ return t.special ? 1.0 : 0.5; }
+// Collision half-extent (grid units): a NORMAL tile is 1x1 (half 0.5). A SPECIAL is a 2x2 (half 1.0)
+// OR 3x3 (half 1.5) object, read from its render size `s`: MISSION 0.7=2x2 / 1.0=3x3 (s>=0.85 -> 3x3);
+// BONUS 1.0=2x2 / 1.5=3x3 (s>=1.25 -> 3x3). A special covers / is covered by its WHOLE footprint, so it
+// only auto-clears when that whole footprint is clear on top. Footprints overlap iff |dx| < ha+hb.
+function specHalf(t){
+  const s = t.s || 0;
+  if(t.special===1001) return s >= 1.25 ? 1.5 : 1.0;   // bonus coin
+  return s >= 0.85 ? 1.5 : 1.0;                         // mission tile (1002)
+}
+function halfOf(t){ return t.special ? specHalf(t) : 0.5; }
 function overlaps(a,b){ const h=halfOf(a)+halfOf(b); return Math.abs(a.x-b.x)<h && Math.abs(a.y-b.y)<h; }
 function isPickable(t){
   if(!t.active) return false;
@@ -241,12 +244,12 @@ function render(){
     d.className='tile';
     const pick = isPickable(t);
     d.classList.add(pick?'pick':'cover');
-    // specials render BIG (≈ s+0.9 ×, ~1.4–2.4× a normal tile) and centred over the cluster they cover
+    // specials render EXACTLY their collision footprint (2x2 or 3x3, units = 2*half) centred on (x,y)
+    // so the frame == what it blocks (no decorative overhang) and auto-clear reads correctly.
     let w=TW, h=TH, lx=((t.x-minX)*SX+pad), ty=((maxY-t.y)*SY+pad);
     if(t.special){
-      // render EXACTLY the 2x2 footprint it covers (radius-1) so the frame == what it blocks:
-      // no decorative overhang -> auto-clear reads correctly (clears iff its 2x2 is clear on top).
-      w=2*TW; h=2*TH; lx-=(w-TW)/2; ty-=(h-TH)/2;
+      const u = 2*halfOf(t);          // 2 units (2x2) or 3 units (3x3)
+      w=u*TW; h=u*TH; lx-=(w-TW)/2; ty-=(h-TH)/2;
     }
     d.style.left=lx+'px'; d.style.top=ty+'px';
     d.style.width=w+'px'; d.style.height=h+'px';

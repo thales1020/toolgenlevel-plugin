@@ -30,16 +30,18 @@ references it rather than duplicating the ~1 MB of art assets.
 
 ## What it renders (faithful to the game)
 
-- **Cover / pickable rule = the engine / Unity `IsCanPickUp` rule:** an upper tile covers a lower one
-  iff `|dx| < 1` AND `|dy| < 1`, the **same for every tile including specials**. A special's big size
-  is **RENDER-ONLY**, it does not change coverage — a special placed at a 2×2 centre (half-integer
-  `x,y`) naturally covers the 2×2 cluster around it. A tile with nothing covering it is pickable.
+- **Cover / pickable rule (footprint overlap):** an upper tile covers a lower one iff their footprints
+  overlap — `|dx| < halfA+halfB` AND `|dy| < halfA+halfB`. A NORMAL tile is 1×1 (half `0.5`); a SPECIAL
+  is a **2×2** (half `1.0`) OR **3×3** (half `1.5`) object read from its `s` (see below). So
+  normal↔normal `= 1.0` (identical to the engine — no-special boards unchanged). A tile with nothing
+  covering it is pickable.
 - **Match-3 tray:** pick a tile → tray; 3 of a type auto-clears. **Game over** when tray length ≥ 7 and
   no type has 3. **Win** when every tile is cleared. Buffs: Shuffle / Undo / +1 Slot.
 - **Specials (optional):** BONUS `1001` and MISSION `1002` are NON-match-3 covers — they never enter
-  the tray and **AUTO-CLEAR (cascading) the moment nothing covers them** (same radius-1 rule). Render
-  size = `s + 0.9` (≈ 1.4–2.4× a normal tile); **bonus draws as a circle, mission as a rounded
-  square**; both dim while covered.
+  the tray and **AUTO-CLEAR (cascading) the moment their WHOLE footprint is clear on top**. The footprint
+  comes from `s`: **mission `0.7` = 2×2, `1.0` = 3×3; bonus `1.0` = 2×2, `1.5` = 3×3**. The special
+  RENDERS at exactly that footprint (2 or 3 cells) so **visual = collision**; **bonus draws as a circle,
+  mission as a rounded square**; both dim while covered.
 - **Mystery (`m:true`):** a normal match-3 tile shown FACE-DOWN (mystery cover art) until it becomes
   pickable, then it reveals its Group_1 face. Plays as a normal tile.
 - **Art:** one random tilebase plate for the whole level + a Group_1 face per distinct tile type
@@ -55,32 +57,35 @@ This is the model the display MUST match. It is the authoritative game rule — 
 verified against the engine (`engine/tile_level_simulator.py`: `_build_visibility` ~L783,
 `compute_coverage` ~L1067), which the code comments trace to **Unity `IsCanPickUp` (0x150D6A8)**.
 
-**The unit-square model.** Every tile — normal, mystery, bonus, mission — is a **1×1 UNIT square
-centred at its `(x, y)`**. The render size `s` (bonus `1.5`, mission varied; drawn at `s + 0.9` ≈
-1.4–2.4×) is **RENDER-ONLY** — a decorative frame. It plays NO part in collision.
+**The footprint model.** A NORMAL / mystery tile is a **1×1 unit square** centred at `(x, y)` (half
+`0.5`). A SPECIAL is a bigger square whose size is read from its `s`:
+
+| footprint | collision half | centre parity | mission `s` | bonus `s` |
+|---|---|---|---|---|
+| **2×2** | `1.0` | half-integer | `0.7` | `1.0` |
+| **3×3** | `1.5` | integer | `1.0` | `1.5` |
+
+(thresholds: mission `s ≥ 0.85 → 3×3`; bonus `s ≥ 1.25 → 3×3`; else 2×2). The special RENDERS at exactly
+this footprint, so the frame == what it blocks — **visual = collision**, no decorative overhang.
 
 **Pickable rule (binary).** A tile is **covered / unpickable** iff some ACTIVE tile on a strictly
-**HIGHER layer** overlaps it: `|dx| < 1` AND `|dy| < 1`. Otherwise it is pickable. Same rule for every
-tile, specials included.
+**HIGHER layer** overlaps its footprint: `|dx| < halfA+halfB` AND `|dy| < halfA+halfB` (partial overlap
+counts). normal↔normal `= 1.0` (== the engine); a 2×2 special↔normal `= 1.5`; a 3×3 special↔normal `= 2.0`.
 
-- **Half-grid stagger ⇒ 2×2 cover.** Tiles on adjacent layers sit at a `0.5` offset; `|dx| = 0.5 < 1`,
-  so ONE upper tile covers the ~**4 lower tiles** (the 2×2) beneath it. A "centre" tile that looks
-  half-exposed under four staggered neighbours is correctly unpickable until those four clear — **not a
-  bug**.
-- **Specials, same rule.** A bonus/mission drawn at 2.4× still only blocks the cells its 1-unit
-  footprint overlaps. Placed at a 2×2 centre (half-integer `x,y`) it covers exactly that 2×2 and
-  **auto-clears the moment nothing covers it** by this same rule.
+- **Half-grid stagger.** Tiles on adjacent layers sit at a `0.5` offset; `|dx| = 0.5 < 1`, so ONE upper
+  normal covers the ~4 lower tiles beneath it. A "centre" tile that looks half-exposed under four
+  staggered neighbours is correctly unpickable until those four clear — **not a bug**.
+- **Specials cover their WHOLE footprint.** A special blocks every tile under its 2×2/3×3 and
+  **auto-clears only when its ENTIRE footprint is clear on top** (not just its centre). Because render ==
+  footprint, this reads correctly on screen.
 - **`compute_coverage` is NOT this.** The engine's 4-corner `compute_coverage` (returns 0–4) feeds only
-  the **cover100 difficulty score** — it is NOT the pickability test. Do not conflate the two: coverage
-  = a scoring metric, `IsCanPickUp` = the binary any-overlap rule above.
-- **Placement, not rendering, is the failure mode.** Because collision is 1-unit but the frame is big,
-  a special is only visually honest when it sits at a **2×2 centre**. A mis-placed special's frame
-  visually overhangs tiles it does NOT block — that *looks* like an overlap bug but the logic is
-  correct; fix it by authoring specials at 2×2 centres (see `reserve_special.py`, which does this).
+  the **cover100 difficulty score** — NOT pickability. Do not conflate: coverage = a scoring metric.
+- **Stay within the layout.** `reserve_special.py` places a special only where its whole footprint fits
+  inside the layout bounds and ≥1 tile still covers it at start (so it doesn't auto-clear immediately).
 
-Because the player uses exactly this rule, **what you see = what actually plays** — cross-checked:
-player `isPickable` == engine `_build_visibility` pickable set on every cell of the reference levels,
-and it matches `verify_smart_v3` / `solve_v3_special`.
+Because the player, `solve_v3_special`, and `reserve_special` all derive the footprint from `s` the
+same way, **what you see = what actually plays** — cross-checked: player `isPickable` and
+special-covered-at-start match the solver's visibility on every cell (2×2 and 3×3 levels).
 
 ## Worked example
 

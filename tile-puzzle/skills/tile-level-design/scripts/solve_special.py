@@ -22,16 +22,36 @@ from verify_smart_v3 import build_bitmask_visibility  # noqa: F401  (kept for re
 TRAY_SIZE = 7
 
 
-def _build_visibility_2x2(cells, sset):
-    """Visibility with the special COLLISION model: a NORMAL tile is 1×1 (half 0.5), a SPECIAL
-    (bonus/mission) is a 2×2 object (half 1.0). An upper cell blocks a lower one iff their footprints
-    overlap: |dx| < halfA+halfB & |dy| < halfA+halfB  (partial overlap counts). So normal↔normal = 1.0
-    (identical to the engine — no-special boards are unchanged), special↔normal = 1.5, special↔special
-    = 2.0. Matches make_play_html's `halfOf(t)=t.special?1.0:0.5`."""
+def footprint_half(sid, s):
+    """Special collision half-extent from its render `s` (2×2 → 1.0, 3×3 → 1.5).
+    MISSION (1002): s = 0.7 → 2×2, s = 1.0 → 3×3  (threshold s ≥ 0.85 → 3×3).
+    BONUS   (1001): s = 1.0 → 2×2, s = 1.5 → 3×3  (threshold s ≥ 1.25 → 3×3).
+    None / unknown → 2×2 (half 1.0). Shared with make_play_html's JS `specHalf` and reserve_special."""
+    if s is None:
+        return 1.0
+    if sid == 1001:
+        return 1.5 if s >= 1.25 else 1.0
+    return 1.5 if s >= 0.85 else 1.0
+
+
+def _build_visibility_2x2(cells, sset, special_halves=None):
+    """Visibility with the special COLLISION model: a NORMAL tile is 1×1 (half 0.5); a SPECIAL is a
+    2×2 (half 1.0) OR 3×3 (half 1.5) object. The per-special half comes from `special_halves` — a dict
+    {(round(x,4), round(y,4), layer_idx): half} (built by the caller from each stone's `s` via
+    footprint_half); any special not in the map defaults to 1.0 (2×2). An upper cell blocks a lower one
+    iff their footprints overlap: |dx| < halfA+halfB & |dy| < halfA+halfB (partial overlap counts).
+    normal↔normal = 1.0 (identical to the engine — no-special boards unchanged); a 2×2 special↔normal
+    = 1.5, a 3×3 special↔normal = 2.0. Matches make_play_html's `halfOf`."""
     n = len(cells)
     blocked_by = [0] * n
     blocks = [0] * n
-    half = [1.0 if c.tile_id in sset else 0.5 for c in cells]
+    def _hf(c):
+        if c.tile_id not in sset:
+            return 0.5
+        if special_halves:
+            return special_halves.get((round(c.x, 4), round(c.y, 4), c.layer_idx), 1.0)
+        return 1.0
+    half = [_hf(c) for c in cells]
     for i in range(n):
         ci = cells[i]
         for j in range(n):
@@ -50,7 +70,7 @@ class _CapHit(Exception):
     pass
 
 
-def solve_v3_special(board, special_ids=(1001, 1002), max_expansions=None, verbose=False):
+def solve_v3_special(board, special_ids=(1001, 1002), max_expansions=None, verbose=False, special_halves=None):
     cells = board.all_cells()
     n = len(cells)
     sset = set(special_ids)
@@ -64,7 +84,7 @@ def solve_v3_special(board, special_ids=(1001, 1002), max_expansions=None, verbo
     tile_ids = [(-1 if is_special[i] else raw[i]) for i in range(n)]
     norm = [t for t in tile_ids if t >= 0]
     n_types = (max(norm) + 1) if norm else 1
-    blocked_by, blocks = _build_visibility_2x2(cells, sset)   # specials collide as 2×2 (see helper)
+    blocked_by, blocks = _build_visibility_2x2(cells, sset, special_halves)   # specials collide as 2×2/3×3
 
     def tray_count(tray, t): return (tray >> (t * 2)) & 3
     def tray_add(tray, t):   return tray + (1 << (t * 2))

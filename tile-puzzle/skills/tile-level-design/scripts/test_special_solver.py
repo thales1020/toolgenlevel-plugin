@@ -124,6 +124,35 @@ check("special covers a normal 1.2 away in its 2x2 -> normal blocked", bb3[nlow]
 check("lone special (nothing above its 2x2) auto-clears -> solvable",
       V(mk([(0, 0, 0, 1001)])) is True)
 
+print("E. 3x3 special footprint (half 1.5 via special_halves -> covers/covered across its 3x3):")
+def _cells_half(spec, half_map):
+    """Returns (cells, special_halves-map) — half_map keyed by tile_id (Cell is __slots__-locked)."""
+    b = mk(spec); sh = {}
+    for c in b.all_cells():
+        if c.tile_id in half_map:
+            sh[(round(c.x, 4), round(c.y, 4), c.layer_idx)] = half_map[c.tile_id]
+    return b, b.all_cells(), sh
+def Vh(board, sh, cap=300_000):
+    return solve_v3_special(board, special_ids=(1001, 1002), max_expansions=cap, special_halves=sh)[0]
+# E1: a 3x3 special (half 1.5) covered by a tile 1.8 away (inside its 3x3) -> blocked, won't auto-clear
+_, cs3a, sh3a = _cells_half([(0, 0, 0, 1001), (1, 1.8, 0, 0)], {1001: 1.5})
+bb3a, _ = _build_visibility_2x2(cs3a, SIDS, sh3a)
+si3 = next(i for i, c in enumerate(cs3a) if c.tile_id == 1001)
+check("3x3 special covered by a tile 1.8 away (its 3x3) -> blocked", bb3a[si3] != 0)
+# E1 control: the SAME geometry with a 2x2 special (half 1.0) -> 1.8 is outside its footprint -> NOT blocked
+_, cs2a, sh2a = _cells_half([(0, 0, 0, 1001), (1, 1.8, 0, 0)], {1001: 1.0})
+bb2a, _ = _build_visibility_2x2(cs2a, SIDS, sh2a)
+si2 = next(i for i, c in enumerate(cs2a) if c.tile_id == 1001)
+check("control: a 2x2 special is NOT covered by a tile 1.8 away", bb2a[si2] == 0)
+# E2: a 3x3 special COVERS a normal 1.8 away below it -> that normal is blocked while present
+_, cs3b, sh3b = _cells_half([(1, 0, 0, 1002), (0, 1.8, 0, 0)], {1002: 1.5})
+bb3b, _ = _build_visibility_2x2(cs3b, SIDS, sh3b)
+nlow3 = next(i for i, c in enumerate(cs3b) if c.tile_id == 0)
+check("3x3 special covers a normal 1.8 away in its 3x3 -> normal blocked", bb3b[nlow3] != 0)
+# E3: a 3x3 special covering a ÷3 cluster below, itself uncovered -> auto-clears -> solvable
+_bE3, _cE3, shE3 = _cells_half([(0, i, 0, 0) for i in range(6)] + [(1, 1.0, 0.5, 1002)], {1002: 1.5})
+check("3x3 special over 6 match-3 tiles, nothing above -> solvable", Vh(_bE3, shE3) is True)
+
 npass = sum(1 for _, ok, _ in R if ok)
 print(f"\n{npass}/{len(R)} PASS")
 sys.exit(0 if npass == len(R) else 1)
