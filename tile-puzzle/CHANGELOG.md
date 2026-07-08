@@ -1,5 +1,21 @@
 # Changelog — tile-puzzle
 
+## 0.4.3
+
+- **`reserve_special` — AUTO-MIX footprints by default.** `--mission N` / `--bonus N` with NO
+  `--*-cover` flag now auto-mixes 2×2 and 3×3 specials (`n_3x3 = N//2`, rest 2×2 — so N=4 → 2+2, N=5 →
+  2×3×3+3×2×2; ≥1 of each for N≥2). Force uniform with `--mission-cover/--bonus-cover 2x2|3x3`; explicit
+  `--mission-2x2/--mission-3x3` counts still compose.
+- **`solve_special` — close the bare-file 3×3 divergence** (audit). Added `special_halves_from_level(data)`
+  which builds the `{(x,y,layer): footprint_half}` map from a level JSON's `s` values, and a CLI
+  `python solve_special.py <level.json>` that uses it — so solving a FILE models 3×3 specials as 3×3,
+  not the optimistic 2×2 default. Docstring example updated. (`reserve_special` already passed its map.)
+- **Docs de-staled** (audit): `tile-level-design/SKILL.md` §23 rewritten to the current model
+  (direction-C interstitial covers over a ÷3 board, 2×2/3×3 footprint from `s`, stacking, offset
+  placement, derived `sl`) — dropped the old "reserved slot / match-3 pool EXCLUDES", old render-`s`
+  (bonus 1.5 / mission 0.6-1.2), and "sl=2 constant" text. `display-json-level/SKILL.md` machine-specific
+  cache path replaced with a `<plugin-cache>` placeholder.
+
 ## 0.4.2
 
 - **`new_diffScore` — the validated player-difficulty formula is now the recommended difficulty rank.**

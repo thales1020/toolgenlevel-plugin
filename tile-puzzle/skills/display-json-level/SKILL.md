@@ -22,7 +22,8 @@ If `${CLAUDE_PLUGIN_ROOT}` is not set, use the absolute cache-path form (same co
 tile-level-design SKILL.md §19):
 
 ```bash
-python C:/Users/tamng/.claude/plugins/cache/toolgenlevel/tile-puzzle/<version>/skills/tile-level-design/scripts/make_play_html.py <level.json> [out.html]
+python <plugin-cache>/toolgenlevel/tile-puzzle/<version>/skills/tile-level-design/scripts/make_play_html.py <level.json> [out.html]
+# <plugin-cache> = ~/.claude/plugins/cache  (e.g. C:/Users/<you>/.claude/plugins/cache on Windows)
 ```
 
 The renderer lives in the **tile-level-design** skill (shared with `make_gallery_play.py`); this skill

@@ -12,8 +12,14 @@ same (status, best_depth, expansions). The engine file is left byte-identical (p
 the skill's scripts/.
 
 Usage (programmatic):
-    from solve_special import solve_v3_special
-    status, depth, exp = solve_v3_special(board, special_ids=(1001, 1002), max_expansions=2_000_000)
+    from solve_special import solve_v3_special, special_halves_from_level
+    import json
+    data = json.load(open(path, encoding="utf-8"))
+    board = load_board_from_file(path)                       # ABSOLUTE path
+    halves = special_halves_from_level(data)                 # <-- REQUIRED so 3×3 specials solve as 3×3
+    status, depth, exp = solve_v3_special(board, special_ids=(1001, 1002),
+                                          max_expansions=2_000_000, special_halves=halves)
+    # (without `special_halves` every special is modelled as 2×2 — optimistic for 3×3 levels)
 """
 import sys, os, time
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "engine"))
@@ -32,6 +38,22 @@ def footprint_half(sid, s):
     if sid == 1001:
         return 1.5 if s >= 1.25 else 1.0
     return 1.5 if s >= 0.85 else 1.0
+
+
+def special_halves_from_level(data, special_ids=(1001, 1002)):
+    """Build the {(round(x,4), round(y,4), layer_idx): footprint_half} map from a level JSON's special
+    stones (keyed to match the loaded board's cells), so solving a FILE directly models each special's
+    true 2×2/3×3 footprint. Pass the result as `solve_v3_special(..., special_halves=<this>)`. Without
+    it, `solve_v3_special` defaults every special to 2×2 (half 1.0) — OPTIMISTIC for 3×3 specials."""
+    sset = set(special_ids)
+    halves = {}
+    for ly in data.get("layers", []):
+        L = ly.get("index")
+        for st in ly.get("stones", []):
+            i = st.get("i")
+            if i in sset:
+                halves[(round(float(st["x"]), 4), round(float(st["y"]), 4), L)] = footprint_half(i, st.get("s"))
+    return halves
 
 
 def _build_visibility_2x2(cells, sset, special_halves=None):
@@ -211,3 +233,23 @@ def solve_v3_special(board, special_ids=(1001, 1002), max_expansions=None, verbo
         print(f"*** {'SOLVED' if result else 'DEAD'} {stats['expansions']:,} exp depth={stats['best_depth']} "
               f"{time.time()-start:.1f}s | {len(dead):,} dead ***")
     return result, stats["best_depth"], stats["expansions"]
+
+
+if __name__ == "__main__":
+    # CLI: solve a level FILE the CORRECT way — builds the 2×2/3×3 footprint map from the JSON so
+    # 3×3 specials aren't under-modelled as 2×2.  python solve_special.py <level.json> [max_exp]
+    import json
+    from tile_level_simulator import load_board_from_file
+    if len(sys.argv) < 2:
+        raise SystemExit("usage: python solve_special.py <level.json> [max_expansions]")
+    p = os.path.abspath(sys.argv[1])
+    cap = int(sys.argv[2]) if len(sys.argv) > 2 else 2_000_000
+    data = json.load(open(p, encoding="utf-8"))
+    board = load_board_from_file(p)
+    if board is None:
+        raise SystemExit(f"could not load board from {p}")
+    halves = special_halves_from_level(data)
+    st, depth, exp = solve_v3_special(board, special_ids=(1001, 1002), max_expansions=cap, special_halves=halves)
+    n3 = sum(1 for h in halves.values() if h >= 1.5)
+    print(f"{os.path.basename(p)}: solvable={st}  depth={depth}  exp={exp}  "
+          f"| specials={len(halves)} ({n3}×3x3, {len(halves)-n3}×2x2)")

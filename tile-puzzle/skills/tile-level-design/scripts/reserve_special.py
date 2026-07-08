@@ -23,6 +23,9 @@ Usage:
   python reserve_special.py <empty_layout.json> --bonus N --mission M
        [--mission-cover 2x2|3x3] [--bonus-cover 2x2|3x3] [--size S]
        [--out o.json] [--color-count 10] [--distance 2] [--seeds 40] [--smin S --smax S]
+  # --mission N / --bonus N with NO --*-cover flag => AUTO-MIX 2x2 + 3x3 footprints (n//2 are 3x3),
+  #   so a level with several specials shows both sizes. Force uniform with --mission-cover 2x2|3x3.
+  # explicit mix counts also work: --mission-2x2 X --mission-3x3 Y (and --bonus-2x2/--bonus-3x3).
   # legacy single-special form still works:  --id 1001|1002 --n N
 """
 import sys, os, json, argparse, random
@@ -40,6 +43,15 @@ WEIGHTS = json.load(open(os.path.join(os.path.dirname(HERE), "engine", "scoring_
 #   3×3 (collision half 1.5, centre on an INTEGER):      mission s=1.0, bonus s=1.5
 # The player + solver read the footprint back from `s` via solve_special.footprint_half.
 _COVER_HALF = {"2x2": 1.0, "3x3": 1.5}
+
+
+def _mix_want(sid, n, cover):
+    """N specials of `sid`, as [(sid, half)]. cover None => AUTO-MIX (n_3x3 = n//2, rest 2×2, so a level
+    with several specials shows both sizes); cover '2x2'/'3x3' => uniform footprint."""
+    if cover is None:
+        n3 = n // 2
+        return [(sid, _COVER_HALF["3x3"])] * n3 + [(sid, _COVER_HALF["2x2"])] * (n - n3)
+    return [(sid, _COVER_HALF[cover])] * n
 
 
 def _emit_s(sid, half):
@@ -182,8 +194,10 @@ def main():
     ap.add_argument("--size", type=float, default=None,
                     help="render size 's' OVERRIDE for ALL specials (else derived from the cover footprint: "
                          "mission 2x2=0.7/3x3=1.0, bonus 2x2=1.0/3x3=1.5). s ALSO encodes the footprint.")
-    ap.add_argument("--mission-cover", choices=("2x2", "3x3"), default="2x2", help="footprint for --mission N (default 2x2)")
-    ap.add_argument("--bonus-cover", choices=("2x2", "3x3"), default="2x2", help="footprint for --bonus N (default 2x2)")
+    ap.add_argument("--mission-cover", choices=("2x2", "3x3"), default=None,
+                    help="footprint for --mission N. Omit = AUTO-MIX 2x2+3x3 (n//2 are 3x3); or force uniform 2x2/3x3")
+    ap.add_argument("--bonus-cover", choices=("2x2", "3x3"), default=None,
+                    help="footprint for --bonus N. Omit = AUTO-MIX 2x2+3x3 (n//2 are 3x3); or force uniform 2x2/3x3")
     # explicit per-footprint counts — MIX 2x2 and 3x3 specials in one level (add on top of --mission/--bonus)
     ap.add_argument("--mission-2x2", type=int, default=0, help="mission tiles with a 2x2 footprint (s=0.7)")
     ap.add_argument("--mission-3x3", type=int, default=0, help="mission tiles with a 3x3 footprint (s=1.0)")
@@ -200,15 +214,14 @@ def main():
     # `want` = one (sid, footprint-half) per special to place. Supports MIXING 2×2 and 3×3.
     H = _COVER_HALF
     want = []
-    if a.mission: want += [(1002, H[a.mission_cover])] * a.mission
-    if a.bonus:   want += [(1001, H[a.bonus_cover])]   * a.bonus
+    if a.mission: want += _mix_want(1002, a.mission, a.mission_cover)   # cover None -> auto-mix 2x2+3x3
+    if a.bonus:   want += _mix_want(1001, a.bonus, a.bonus_cover)
     want += [(1002, H["2x2"])] * a.mission_2x2 + [(1002, H["3x3"])] * a.mission_3x3
     want += [(1001, H["2x2"])] * a.bonus_2x2   + [(1001, H["3x3"])] * a.bonus_3x3
     if a.id is not None:
         if a.n is None:
             raise SystemExit("--id requires --n")
-        cov = a.bonus_cover if a.id == 1001 else a.mission_cover
-        want += [(a.id, H[cov])] * a.n
+        want += _mix_want(a.id, a.n, a.bonus_cover if a.id == 1001 else a.mission_cover)
     if not want:
         raise SystemExit("specify --mission/--bonus (+ --*-cover) or --mission-2x2/--mission-3x3/--bonus-2x2/--bonus-3x3")
     reserve_spec = {}
@@ -283,12 +296,12 @@ def main():
                              "special_counts": {str(s): reserve_spec[s] for s in sorted(reserve_spec)},
                              "normal_tiles": n_normal, "normal_score": round(fs, 2),
                              "solvable_v3_special": True, "specials_covered_at_start": True,
-                             "placement": f"interstitial covers (direction C); bonus={a.bonus_cover} mission={a.mission_cover}"}}
+                             "placement": f"interstitial covers (direction C); bonus={a.bonus_cover or 'auto-mix'} mission={a.mission_cover or 'auto-mix'}"}}
         out = a.out or a.layout.replace(".json", f"_{kind}.json").replace("NewLayout_", f"Level_{kind}_")
         json.dump(data, open(out, "w", encoding="utf-8"), separators=(",", ":"), ensure_ascii=False)
         print(f"-> {out}")
         print(f"   {kind}: added {reserve_spec} as interstitial covers "
-              f"(bonus={a.bonus_cover}, mission={a.mission_cover})  | normals={n_normal} (÷3) "
+              f"(bonus={a.bonus_cover or 'auto-mix'}, mission={a.mission_cover or 'auto-mix'})  | normals={n_normal} (÷3) "
               f"| score={fs:.1f}  | seed={seed}")
         print("   v3-solvable with special AUTO-CLEAR; every special COVERED at start (won't auto-clear immediately).")
         return 0

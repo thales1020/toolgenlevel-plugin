@@ -462,23 +462,26 @@ correct step and stage — NEVER mix them into base gen (keeps the v3 solver on 
 | Special | What (reverse-engineered) | Stage | Tool |
 |---|---|---|---|
 | **STACK** | straight vertical pile (same x,y all layers, no +0.5 stagger); registered in `stacks:[{x,y,d}]` | GEOMETRY — **before tiles** | `gen-layout/scripts/add_stacks.py` (pattern + symmetric) |
-| **BONUS `1001`** (round) / **MISSION `1002`** | a NON-match-3 reserved slot that AUTO-CLEARS when uncovered. `total − count(special)` is ÷3 in 100% of reference files → the match-3 pool EXCLUDES these slots. Render `s`: bonus always **1.5**; mission VARIED (default per-tile MIXED 0.6/0.9/1.2, the L30-120 style) | reserve **at tile-assignment** | `scripts/reserve_special.py --bonus N --mission M` (combine both in one pass; `--id/--n` legacy single; `--size` overrides all) |
+| **BONUS `1001`** (round) / **MISSION `1002`** (square) | a NON-match-3 **cover** that AUTO-CLEARS when its footprint is clear on top. **Direction C:** specials are ADDED as interstitial covers over a COMPLETE ÷3 normal board — they NEVER consume a match-3 cell (normals alone stay ÷3). Footprint = **2×2 or 3×3**, encoded by `s`: MISSION `0.7`=2×2 / `1.0`=3×3; BONUS `1.0`=2×2 / `1.5`=3×3 (collision half 1.0 / 1.5 — shared with player + solver). Placed offset/straddling, within layout bounds, covered-at-start; overlapping specials STACK on distinct layers. | added **after a solvable normal board** (built in one pass) | `scripts/reserve_special.py --bonus N --mission M` (no `--*-cover` → **auto-mix** 2×2+3×3; force with `--mission-cover/--bonus-cover 2x2\|3x3`; explicit counts `--mission-2x2/--mission-3x3` etc.; `--size` overrides `s`) |
 | **MYSTERY `m:true`** | a NORMAL match-3 tile that is FACE-DOWN to the player — colour FIXED at design time, only hidden visually. Plays as a normal tile (L*M reference boards stay ÷3 WITH mystery tiles counted) → no effect on geometry/balance/solvability. Reference: 3-5 per level | **after tiles** | `scripts/add_special_cells.py --mystery N` (omit N → random 3-5; `--mark` is a kept alias) |
 
-Key rule: **bonus/mission are reserved BEFORE match-3 is assigned**, never retyped onto a finished
-level (retyping a match-3 cell unbalances its type → breaks solvability). `reserve_special` pre-sets N
-cells to the special id, assigns match-3 to the REST (trimmed to ÷3), and verifies solvability with
-`scripts/solve_special.py` (`solve_v3_special`) — a v3 DFS that keeps the specials in the board as
-covers and AUTO-CLEARS them when exposed (rigorous; the engine v3 stays byte-identical). Position can
-be random — a solvable level exposes every cell.
+Key rule (direction C): `reserve_special` first assigns a full **v3-solvable NORMAL level** (÷3), then
+ADDS each special on an interstitial layer over a 2×2/3×3 cluster — no normal cell is removed, so the
+match-3 set stays ÷3. It hard-verifies with `scripts/solve_special.py` (`solve_v3_special`, footprint-
+aware) that the board is solvable AND every special is covered-at-start (won't auto-clear immediately).
+To solve a level FILE yourself: `python solve_special.py <level.json>` (its CLI builds the 2×2/3×3
+footprint map from `s` so 3×3 specials aren't under-modelled) — or programmatically pass
+`special_halves=special_halves_from_level(data)`.
 
 **Mystery (`m:true`) needs NO re-verify**: it is a normal match-3 tile that is merely face-down to the
 player (fixed colour, hidden visually), so it cannot change a level's solvability. Add it LAST, after
 the level is already solvable, with `add_special_cells.py --mystery N` (default random 3-5).
 
 **Final step — match the game format exactly:** the generators emit a `metadata` block; the game
-LEVEL format is `{group,tiles,layers,stacks,bg,bgm,sl,dif}` (no metadata; `sl=2`,`dif=1` constant).
-Run `scripts/export_game_format.py <level.json>` last → byte-shape-identical to the reference files.
+LEVEL format is `{group,tiles,layers,stacks,bg,bgm,sl,dif}` (no metadata; `dif=1` constant). **`sl` is
+DERIVED from content**, not constant: a MISSION level (any `i=1002`) → `sl=2`; else a BONUS level
+(`i=1001`) → `sl=1`; a normal / mystery-only level → the `sl` key is OMITTED (verified: BonusLevel=1,
+MissionTile=2, mystery-only have none). Run `scripts/export_game_format.py <level.json>` last.
 
 ```bash
 # image → level with bonus + mission + mystery, game-ready:
