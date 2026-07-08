@@ -36,7 +36,7 @@ new_diffScore = max(0, -28.42 + 0.655·intra_group + 0.804·cover100 + 2.897·n_
 ```
 - `intra_group`, `cover100` — from `DifficultyScorer.compute_full_score` (the two chaos-score components
   that actually track difficulty; they feed THIS — don't rank with `final_score`).
-- `n_types` — distinct `tile_id` over all cells. `is_mystery` — 1 if any stone has `m:true`.
+- `n_types` — distinct `tile_id` over all cells. `is_mystery` — 1 if any stone is mystery (`o:[0]` or legacy `m:true`).
 - Tool: `scripts/diff_score.py <level.json>` (or `analyze_level.py` now prints it first).
 
 | new_diffScore | Tier (relative guide) |
@@ -463,8 +463,8 @@ correct step and stage — NEVER mix them into base gen (keeps the v3 solver on 
 |---|---|---|---|
 | **STACK** | straight vertical pile (same x,y all layers, no +0.5 stagger); registered in `stacks:[{x,y,d}]` | GEOMETRY — **before tiles** | `gen-layout/scripts/add_stacks.py` (pattern + symmetric) |
 | **BONUS `1001`** (round) / **MISSION `1002`** (square) | a NON-match-3 **cover** that AUTO-CLEARS when its footprint is clear on top. **Direction C:** specials are ADDED as interstitial covers over a COMPLETE ÷3 normal board — they NEVER consume a match-3 cell (normals alone stay ÷3). Footprint = **2×2 or 3×3**, encoded by `s`: MISSION `0.7`=2×2 / `1.0`=3×3; BONUS `1.0`=2×2 / `1.5`=3×3 (collision half 1.0 / 1.5 — shared with player + solver). Placed offset/straddling, within layout bounds, covered-at-start; overlapping specials STACK on distinct layers. | added **after a solvable normal board** (built in one pass) | `scripts/reserve_special.py --bonus N --mission M` (no `--*-cover` → **auto-mix** 2×2+3×3; force with `--mission-cover/--bonus-cover 2x2\|3x3`; explicit counts `--mission-2x2/--mission-3x3` etc.; `--size` overrides `s`) |
-| **MYSTERY `m:true`** | a NORMAL match-3 tile that is FACE-DOWN to the player — colour FIXED at design time, only hidden visually. Plays as a normal tile (L*M reference boards stay ÷3 WITH mystery tiles counted) → no effect on geometry/balance/solvability. Reference: 3-5 per level | **after tiles** | `scripts/add_special_cells.py --mystery N` (omit N → random 3-5; `--mark` is a kept alias) |
-| **CLOUD `o:[1]`** | a NORMAL match-3 tile covered by the mystery cover art (fills the WHOLE tile); the cover clears MISSION-STYLE (the instant nothing on a higher layer overlaps it = when it becomes pickable), revealing the real face — only the cover layer clears, the tile stays. Plays as a normal tile → NO effect on solvability (solver ignores `o`). Placed as a SYMMETRIC region on the BOTTOM layer(s) 0-1 only (NEVER the top — must start covered), ~33% of tiles. Candidate cells must be COVERED **and VISIBLE (peek)** — no tile directly on top — so cloud levels REQUIRE a **STAGGERED layout** (gen-layout default `uniform_stagger`, §9); a COLUMNAR layout hides every bottom cell → add_cloud places 0. `o` value: **1=cloud** (0=mystery, a future variant) | **after tiles** | `scripts/add_cloud.py` (default ~33%, `--cloud-pct`/`--cloud N`, `--axis auto`, `--layers 0,1`) |
+| **MYSTERY `o:[0]`** (legacy `m:true`) | a NORMAL match-3 tile that is FACE-DOWN — colour FIXED at design time. It stays COVERED on the board **even when pickable**: the player picks it BLIND and its real colour is revealed only once it lands in the TRAY (distinct from CLOUD, which reveals on-board when uncovered). Plays as a normal tile (÷3 unchanged) → no effect on geometry/balance/solvability. Placement: **RANDOM, any layer**, 3-5 per level. `o`: **0=mystery, 1=cloud** (`m:true` is the OLD marker, still read) | **after tiles** | `scripts/add_special_cells.py --mystery N` (omit N → random 3-5; emits `o:[0]`; `--mark` is a kept alias) |
+| **CLOUD `o:[1]`** | a NORMAL match-3 tile covered by the mystery cover art (fills the WHOLE tile); the cover clears MISSION-STYLE (the instant nothing on a higher layer overlaps it = when it becomes pickable), revealing the real face — only the cover layer clears, the tile stays. Plays as a normal tile → NO effect on solvability (solver ignores `o`). Placed as a SYMMETRIC region on the BOTTOM layer(s) 0-1 only (NEVER the top — must start covered), ~33% of tiles. Candidate cells must be COVERED **and VISIBLE (peek)** — no tile directly on top — so cloud levels REQUIRE a **STAGGERED layout** (gen-layout default `uniform_stagger`, §9); a COLUMNAR layout hides every bottom cell → add_cloud places 0. `o` value: **1=cloud, 0=mystery** | **after tiles** | `scripts/add_cloud.py` (default ~33%, `--cloud-pct`/`--cloud N`, `--axis auto`, `--layers 0,1`) |
 
 Key rule (direction C): `reserve_special` first assigns a full **v3-solvable NORMAL level** (÷3), then
 ADDS each special on an interstitial layer over a 2×2/3×3 cluster — no normal cell is removed, so the
@@ -474,9 +474,10 @@ To solve a level FILE yourself: `python solve_special.py <level.json>` (its CLI 
 footprint map from `s` so 3×3 specials aren't under-modelled) — or programmatically pass
 `special_halves=special_halves_from_level(data)`.
 
-**Mystery (`m:true`) needs NO re-verify**: it is a normal match-3 tile that is merely face-down to the
-player (fixed colour, hidden visually), so it cannot change a level's solvability. Add it LAST, after
-the level is already solvable, with `add_special_cells.py --mystery N` (default random 3-5).
+**Mystery (`o:[0]`) needs NO re-verify**: it is a normal match-3 tile that is merely face-down (fixed
+colour, revealed only when picked into the tray), so it cannot change a level's solvability. Add it
+LAST, after the level is already solvable, with `add_special_cells.py --mystery N` (default random 3-5,
+emits `o:[0]`; legacy `m:true` still read).
 
 **Final step — match the game format exactly:** the generators emit a `metadata` block; the game
 LEVEL format is `{group,tiles,layers,stacks,bg,bgm,sl,dif}` (no metadata; `dif=1` constant). **`sl` is

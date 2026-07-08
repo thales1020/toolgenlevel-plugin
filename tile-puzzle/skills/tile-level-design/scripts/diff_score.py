@@ -9,7 +9,7 @@ Inputs:
   - intra_group, cover100 : DifficultyScorer.compute_full_score(board, weights)   (the OLD chaos-score's
     two components that actually track difficulty — they feed THIS, don't rank with final_score).
   - n_types               : number of distinct tile_id over all cells.
-  - is_mystery            : 1 if any stone has m:true (Mystery Tile), else 0.
+  - is_mystery            : 1 if any stone is a Mystery Tile — new `o:[0]` or legacy `m:true`, else 0.
 
 Known limitation (single dominant error): STATIC-only, BLIND to in-level mechanics — it always
 UNDER-rates hard mechanic levels (never over-rates) EXCEPT the +22.76 mystery term, which OVER-rates
@@ -61,7 +61,9 @@ def tier(score):
 def _is_mystery_from_json(path):
     with open(path, encoding="utf-8") as f:
         data = json.load(f)
-    return 1 if any(st.get("m") for ly in data.get("layers", []) for st in ly.get("stones", [])) else 0
+    # mystery marker = new o:[0] OR legacy m:true (cloud is o:[1] — NOT mystery)
+    return 1 if any(st.get("m") or (0 in (st.get("o") or []))
+                    for ly in data.get("layers", []) for st in ly.get("stones", [])) else 0
 
 
 def new_diffscore_for_file(path):

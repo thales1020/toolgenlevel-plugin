@@ -9,8 +9,8 @@ special content (verified from the reference data): a level with a MISSION tile 
 else a level with a BONUS tile (i=1001) → `sl=1`; a normal / mystery-only level (no bonus/mission) →
 `sl` is OMITTED entirely (reference BonusLevel files have sl=1, MissionTile files sl=2, mystery-only
 L*M files have no sl). `bg`/`bgm` default to "" (a valid value present in the reference); override with
---bg/--bgm. `group` is preserved (or --group). Stone fields (i,x,y,s,m,o) — including CLOUD's `o:[1]`
-— and stacks {x,y,d} are already game-identical and copied as-is.
+--bg/--bgm. `group` is preserved (or --group). Stone fields (i,x,y,s,m,o) — including MYSTERY `o:[0]`
+(legacy `m:true`) and CLOUD `o:[1]` — and stacks {x,y,d} are already game-identical and copied as-is.
 
 Run this as the FINAL pipeline step on a complete level (after tiles + any stack/mission/mark cells).
 

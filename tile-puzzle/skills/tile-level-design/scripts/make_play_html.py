@@ -13,9 +13,10 @@ Faithful to game rules (normal match-3):
 SPECIAL tiles (auto-detected — match the simulator's solve_v3_special model):
   - BONUS (i=1001) / MISSION (i=1002): NON-match-3 covers. Never enter the tray; AUTO-CLEAR
     for free (cascading) the instant nothing in a higher layer covers them.
-  - MYSTERY (m:true) / CLOUD (o:[1]): a NORMAL match-3 tile shown under the mystery cover art until
-    pickable, then it reveals its real face and plays as a normal tile. (Cloud's cover clears
-    mission-style = the instant it is uncovered = pickable.)
+  - MYSTERY (o:[0], or legacy m:true) / CLOUD (o:[1]): a NORMAL match-3 tile shown under the mystery
+    cover art. Reveal timing differs — MYSTERY stays covered on the board EVEN when pickable (picked
+    BLIND; its real colour shows only in the TRAY once picked); CLOUD reveals on the board the instant
+    it is uncovered (pickable). Both then play as normal match-3 tiles.
 
 REAL ART (play-test only — the level JSON is NOT changed):
   If the bundled assets are present (../assets/tile_faces from Group_1, ../assets/tilebase), each
@@ -37,8 +38,9 @@ with open(LEVEL, encoding="utf-8") as f:
     data = json.load(f)
 
 # ---- flatten stones -> [{id,x,y,layer,tid,special,mystery,cloud}] ----
-# MYSTERY (`m:true`) and CLOUD (`o:[1]`) are both NORMAL tiles shown under the same tile_cover_mystery
-# art until pickable (cloud's cover clears mission-style = the instant it's uncovered = pickable).
+# MYSTERY (`o:[0]`, legacy `m:true`) and CLOUD (`o:[1]`) are NORMAL tiles under the tile_cover_mystery
+# art. MYSTERY stays covered on the board until PICKED (blind pick, colour shown in the tray); CLOUD
+# reveals on the board when uncovered (pickable).
 tiles = []
 tid_seq = 0
 n_special = n_mystery = n_cloud = 0
@@ -47,8 +49,9 @@ for layer in sorted(data["layers"], key=lambda l: l["index"]):
     for s in layer["stones"]:
         i = int(s.get("i", 0))
         is_special = i >= 1001
-        mystery = bool(s.get("m")) and not is_special
-        cloud = (1 in s.get("o", [])) and not is_special       # o:[1] = cloud (0 = mystery, future)
+        _o = s.get("o") or []
+        mystery = ((0 in _o) or bool(s.get("m"))) and not is_special   # o:[0] new format / m:true legacy
+        cloud = (1 in _o) and not is_special                           # o:[1] = cloud
         if is_special:
             n_special += 1
         if mystery:
@@ -77,16 +80,20 @@ def _face_key(p):
     return (0, int(b)) if b.isdigit() else (1, b)
 
 
-art = {"base": None, "mystery": None, "faces": {}}   # faces: {str(tid): datauri}
+art = {"base": None, "mystery": None, "cloud": None, "faces": {}}   # faces: {str(tid): datauri}
 face_files = sorted(glob.glob(os.path.join(FACE_DIR, "*.png")), key=_face_key)
 # random tilebase pool = the named plates (tile_base_1..9 + water); stable-random per level name
 base_pool = sorted(glob.glob(os.path.join(BASE_DIR, "tile_base_*.png")))
-mystery_png = os.path.join(BASE_DIR, "tile_cover_mystery.png")
+# MYSTERY cover = the blue "?" plate; CLOUD cover = the bandaged tile_cover_mystery plate (distinct arts)
+mystery_png = os.path.join(BASE_DIR, "tile_cover_question.png")
+cloud_png = os.path.join(BASE_DIR, "tile_cover_mystery.png")
 if face_files and base_pool:
     rng = random.Random(zlib.crc32(os.path.basename(LEVEL).encode()))
     art["base"] = _datauri(rng.choice(base_pool))
     if os.path.exists(mystery_png):
         art["mystery"] = _datauri(mystery_png)
+    if os.path.exists(cloud_png):
+        art["cloud"] = _datauri(cloud_png)
     # map each distinct normal tile-type to a face; embed only the ones used.
     # Prefer the EXACT sprite when the tile's raw id (tid+1) matches a Group_1 filename — real
     # reference levels use real sprite ids (85,142-170) so they render authentically; generated
@@ -220,14 +227,15 @@ function styleTile(d, t, pick){
     d.title=(t.special===1001?'BONUS (tròn)':'MISSION (vuông)')+' — auto-clear khi hết ô che, L'+t.layer;
     d.appendChild(face); return;
   }
-  // MYSTERY / CLOUD while COVERED: the cover art is a WHOLE-tile image → fill the whole tile with it
-  // (no base plate, no small inner face). When it becomes pickable the cover is REMOVED and the tile
-  // shows its real face underneath (the tile itself stays — only the cover layer clears).
-  const covered=(t.mystery||t.cloud) && !pick;
+  // Cover art fills the WHOLE tile (no base plate, no small inner face). Reveal timing differs:
+  //   MYSTERY (o:[0]/m) stays covered on the board EVEN when pickable — picked BLIND, real colour shows
+  //     only in the tray once picked.  CLOUD (o:[1]) reveals on the board the instant it is uncovered.
+  const covered = t.mystery ? true : (t.cloud && !pick);
   if(covered){
-    if(HAS_ART && ART.mystery){ d.style.backgroundImage='url('+ART.mystery+')'; }
+    const coverArt = t.cloud ? ART.cloud : ART.mystery;   // CLOUD = bandaged plate; MYSTERY = blue "?"
+    if(HAS_ART && coverArt){ d.style.backgroundImage='url('+coverArt+')'; }
     else { d.classList.add('noart'); d.style.background='#5a5a5a'; face.textContent='?'; d.appendChild(face); }
-    d.title=(t.cloud?'CLOUD':'MYSTERY')+' (lớp che — dọn ô trên để lộ) L'+t.layer;
+    d.title=(t.cloud?'CLOUD (dọn ô trên để lộ)':'MYSTERY (pick mù → lộ màu trong khay)')+' L'+t.layer;
     return;
   }
   // NORMAL / revealed: tilebase plate under a Group_1 face
@@ -294,7 +302,7 @@ function render(){
   document.getElementById('stats').textContent=
     `Còn ${left} tiles`+(spLeft?` (${spLeft} special)`:``)+` · tray ${tray.length}/${traySize}`;
   document.getElementById('legend').innerHTML=
-    `<b>🎁</b> bonus &nbsp; <b>🎯</b> mission — tự biến mất khi không còn ô che &nbsp;|&nbsp; ô úp = mystery / cloud (o:[1])`;
+    `<b>🎁</b> bonus &nbsp; <b>🎯</b> mission — tự biến mất khi không còn ô che &nbsp;|&nbsp; ô úp: <b>mystery</b> (o:[0], pick mù → lộ trong khay) · <b>cloud</b> (o:[1], lộ khi hết ô che)`;
   document.getElementById('shuffleBtn').disabled=buffs.shuffle<=0;
   document.getElementById('undoBtn').disabled=buffs.undo<=0||history.length===0;
   document.getElementById('slotBtn').disabled=buffs.slot<=0;

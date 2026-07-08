@@ -1,5 +1,16 @@
 # Changelog — tile-puzzle
 
+## 0.5.1
+
+- **MYSTERY tile moved to the `o:[0]` format + reveal-on-pick.** The mystery marker is now `o:[0]` (the
+  same `o` field as cloud: 0=mystery, 1=cloud); the old `m:true` is LEGACY (still READ by the player and
+  diff_score, but `add_special_cells.py --mystery N` now GENERATES `o:[0]`). Reveal timing fixed to match
+  the game: a mystery tile stays FACE-DOWN on the board **even when pickable** — it is picked BLIND and its
+  real colour shows only once it lands in the TRAY (distinct from CLOUD, which reveals on-board the instant
+  it is uncovered). `make_play_html.py` splits the two reveal rules; a covered mystery is still clickable
+  (blind pick). `diff_score.py` `is_mystery` now counts `o:[0]` OR legacy `m:true`. Placement unchanged
+  (3-5 random, any layer). No solvability impact. SKILL §23 updated.
+
 ## 0.5.0
 
 - **New CLOUD tile (`o:[1]`).** A NORMAL match-3 tile (real colour, matchable, counts ÷3) carrying an
