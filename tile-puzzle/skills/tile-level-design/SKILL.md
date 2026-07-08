@@ -24,7 +24,38 @@ when_to_use: "When the user wants to make/generate a level (one or many), assign
 - v3 cap **100k** for general use, **50k** for sweeps (90% solvable boards solve <50k)
 - NEVER use stock `TileSolver.analyze` (hardcoded 500-cap MC, unreliable)
 
-## 3. Scoring formula (latest)
+## 3. Scoring formula
+
+### 3.0. `new_diffScore` — RANK LEVELS WITH THIS ⭐ (real-play validated)
+
+The recommended player-difficulty metric. STATIC board formula, fit + validated on ~55K real plays of
+the live Pyramid game (LOO-CV Spearman **0.615** all / **0.732** plain-only — see docs/HANDOFF_KNOWLEDGE.md §4.3).
+
+```
+new_diffScore = max(0, -28.42 + 0.655·intra_group + 0.804·cover100 + 2.897·n_types + 22.76·is_mystery)
+```
+- `intra_group`, `cover100` — from `DifficultyScorer.compute_full_score` (the two chaos-score components
+  that actually track difficulty; they feed THIS — don't rank with `final_score`).
+- `n_types` — distinct `tile_id` over all cells. `is_mystery` — 1 if any stone has `m:true`.
+- Tool: `scripts/diff_score.py <level.json>` (or `analyze_level.py` now prints it first).
+
+| new_diffScore | Tier (relative guide) |
+|---|---|
+| < 20 | Easy |
+| 20 – 35 | Normal |
+| 35 – 50 | Hard |
+| 50 – 65 | Very Hard |
+| ≥ 65 | Extreme |
+
+**Known limitation:** static-only, BLIND to in-level mechanics → it **always UNDER-rates** hard mechanic
+levels (never over-rates), EXCEPT the `+22.76` mystery term which **OVER-rates** already-easy mystery
+boards. Board-only ceiling ≈ 0.63–0.66; treat tiers as a relative guide. Don't sprinkle Mystery casually.
+
+### 3.1. `final_score` — OLD chaos-score (visual complexity, NOT for player-difficulty)
+
+DEPRECATED for ranking — it measures visual chaos, not difficulty (it UNDER-rates traps and INVERTS on
+bridge tiers). Kept only as a feature (its `intra_group`+`cover100` feed `new_diffScore`) and for
+score-band screening during generation.
 
 ```
 final = layout × 0.3 + inter × 0.3 + intra × 1.0 + cover100 × 0.6 + pick_div × 0.5 

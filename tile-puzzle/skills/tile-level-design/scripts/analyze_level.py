@@ -34,6 +34,7 @@ else:
     )
 
 from tile_level_simulator import load_board_from_file, DifficultyScorer, load_scoring_weights
+from diff_score import compute_new_diffscore, tier as _diff_tier   # validated player-difficulty formula
 
 
 def position_signature(data):
@@ -92,9 +93,13 @@ def compute_metadata(path):
 
     board = load_board_from_file(path)
     score_obj = None
+    new_diff = None                       # validated player-difficulty (new_diffScore)
     if board is not None:
         weights = load_scoring_weights()
         score_obj = DifficultyScorer.compute_full_score(board, weights=weights)
+        is_mystery = 1 if any(s.get("m") for ly in data["layers"] for s in ly.get("stones", [])) else 0
+        nd, _s, _nt = compute_new_diffscore(board, weights, is_mystery)
+        new_diff = {"new_diffscore": round(nd, 2), "tier": _diff_tier(nd), "is_mystery": is_mystery}
 
     layout_matches = detect_layout(path)
     layout_name = layout_matches[0].replace("NewLayout_", "").replace(".json", "") \
@@ -105,6 +110,9 @@ def compute_metadata(path):
         "n_layers": n_layers,
         "n_types": n_types,
         "total_tiles": total_tiles,
+        # RECOMMENDED difficulty rank (real-play validated). `difficulty` below is the OLD chaos-score.
+        "new_diffscore": new_diff["new_diffscore"] if new_diff else None,
+        "difficulty_tier": new_diff["tier"] if new_diff else None,
         "difficulty": round(score_obj["final_score"], 2) if score_obj else None,
         "score_components": {
             "layout": round(score_obj["layout"], 2),
@@ -126,9 +134,12 @@ def analyze(path, save=False):
     print(f"  So layer:        {metadata['n_layers']}")
     print(f"  So tile total:   {metadata['total_tiles']}")
     print(f"  So loai tile:    {metadata['n_types']}")
+    if metadata.get("new_diffscore") is not None:
+        print(f"  Do kho (new_diffScore): {metadata['new_diffscore']}  [{metadata['difficulty_tier']}]"
+              f"   <- RANK levels with THIS (real-play validated)")
     if metadata["difficulty"] is not None:
         c = metadata["score_components"]
-        print(f"  Do kho (final):  {metadata['difficulty']}")
+        print(f"  final_score (OLD chaos, visual complexity — NOT player-difficulty): {metadata['difficulty']}")
         print(f"    layout={c['layout']} inter={c['inter_group']} intra={c['intra_group']} "
               f"cover100={c['cover100']} pickdiv={c['pickable_diversity']}")
     print(f"  Type distribution: {metadata['type_distribution']}")

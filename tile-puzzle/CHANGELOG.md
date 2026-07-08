@@ -1,5 +1,21 @@
 # Changelog — tile-puzzle
 
+## 0.4.2
+
+- **`new_diffScore` — the validated player-difficulty formula is now the recommended difficulty rank.**
+  `scripts/diff_score.py` computes `max(0, -28.42 + 0.655·intra_group + 0.804·cover100 + 2.897·n_types +
+  22.76·is_mystery)` — fit + validated on ~55K real plays of the live Pyramid game (LOO-CV Spearman
+  0.615 all / 0.732 plain-only; source: docs/HANDOFF_KNOWLEDGE.md §4.3). `analyze_level.py` now prints
+  `new_diffScore` + tier FIRST, and the old 5-component `final_score` is demoted to "OLD chaos-score
+  (visual complexity, NOT player-difficulty)" — kept only as a feature (its `intra_group`+`cover100`
+  feed new_diffScore) and for score-band screening. SKILL §3 rewritten around new_diffScore + its tier
+  guide + the known static-only limitation (under-rates mechanics; the mystery term over-rates easy
+  mystery boards).
+- **`export_game_format.py` — `sl` is now derived from special content, not hardcoded.** Was always
+  `sl=2`; now: a MISSION level (any i=1002) → `sl=2`, else a BONUS level (i=1001) → `sl=1`, else a
+  normal / mystery-only level → the `sl` key is OMITTED (verified: BonusLevel=1, MissionTile=2,
+  mystery-only L*M have no sl). `dif=1` and key order unchanged.
+
 ## 0.4.1
 
 - **Special FOOTPRINT is now 2×2 OR 3×3, driven by the stone's `s`** (unified across player, solver,
