@@ -8,18 +8,21 @@ normal tile underneath, so it changes NOTHING about geometry / match-3 balance /
 solver ignores `o`). The `o` value encodes type: **1 = cloud** (this tool); 0 = mystery (a FUTURE
 variant, not implemented here).
 
-Placement rule (reference stats over the 6 CloudTile files): clouds are ~33% of tiles (range 23-47%),
-on the BOTTOM layer(s) only (0-1, NEVER the top — a cloud must start covered), 100% covered-at-start,
-and the cloud position SET is SYMMETRIC (≥ vertical). Candidate cells must be COVERED (a higher tile
+Placement rule (spec PHẦN 6): clouds are ~15-20% of tiles, on the BOTTOM layer(s) only (0-1, NEVER the
+top — a cloud must start covered), 100% covered-at-start. Candidate cells must be COVERED (a higher tile
 overlaps, so it starts under a cover) AND VISIBLE (no tile sits directly on top — the cover PEEKS out);
 this needs a STAGGERED layout (gen-layout's default `uniform_stagger`) — on a COLUMNAR layout every
-bottom cell is fully hidden and no clouds can be placed. This tool selects symmetric ORBITS of such
-cells, inner-first, until ~cloud-pct% is reached — placing fewer rather than breaking symmetry.
+bottom cell is fully hidden and no clouds can be placed.
+
+Symmetry is HYBRID (spec bug #10 — the old hard-symmetry gate left 79/301 cloud levels with 0 clouds):
+PASS 1 fills from symmetric ORBITS inner-first (keeps the aesthetic where the geometry allows it); if that
+alone can't reach the target, PASS 2 tops up from any covered+visible candidate, inner-first — so the
+target coverage is met and the level is NEVER left with 0 clouds. Fully symmetric iff no top-up was needed.
 
 Run this LAST (after tiles + any bonus/mission/mystery). Preserves every other field.
 
 Usage:
-  python add_cloud.py <level.json> [--cloud-pct 33 | --cloud N] [--layers 0,1] [--axis auto] [--out ...]
+  python add_cloud.py <level.json> [--cloud-pct 18 | --cloud N] [--layers 0,1] [--axis auto] [--out ...]
 """
 import sys, os, json, argparse
 
@@ -48,7 +51,7 @@ def main():
     ap.add_argument("level")
     ap.add_argument("--out", default="")
     ap.add_argument("--cloud", type=int, default=None, help="exact number of cloud tiles (else use --cloud-pct)")
-    ap.add_argument("--cloud-pct", type=float, default=33.0, help="target %% of total tiles (default 33)")
+    ap.add_argument("--cloud-pct", type=float, default=18.0, help="target %% of total tiles (default 18; spec 15-20)")
     ap.add_argument("--layers", default="0,1", help="bottom layer indices to place clouds on (default 0,1)")
     ap.add_argument("--axis", choices=("auto", "vertical", "horizontal", "vh"), default="auto",
                     help="symmetry axis for the cloud region (default auto; at least vertical)")
@@ -100,24 +103,41 @@ def main():
     target = a.cloud if a.cloud is not None else round(a.cloud_pct / 100.0 * total)
     orbits.sort(key=lambda o: (min(abs(x) + abs(y) for (_, x, y) in o), o))   # inner-first coherent region
 
-    chosen = []
+    # PASS 1 — symmetric orbits, inner-first, up to target (whole orbit only, keeps the set symmetric).
+    chosen, chosen_set = [], set()
     for orb in orbits:
         if len(chosen) >= target:
             break
-        chosen.extend(orb)                # whole orbit only — never a partial (would break symmetry)
+        chosen.extend(orb)
+        chosen_set.update(orb)
+    sym_count = len(chosen)
+
+    # PASS 2 (HYBRID fallback, spec bug #10) — if symmetry alone fell short, top up from ANY covered+visible
+    # candidate (inner-first). Breaks perfect symmetry but hits the target and never leaves 0 clouds.
+    if len(chosen) < target:
+        extras = sorted((k for k in cand if k not in chosen_set),
+                        key=lambda k: (abs(k[1]) + abs(k[2]), k))
+        for k in extras:
+            if len(chosen) >= target:
+                break
+            chosen.append(k)
+            chosen_set.add(k)
+
     for key in chosen:
         cand[key]["o"] = [1]
+    fully_symmetric = (len(chosen) == sym_count)
 
     out = a.out or a.level.replace(".json", "_cloud.json")
     json.dump(data, open(out, "w", encoding="utf-8"), separators=(",", ":"), ensure_ascii=False)
     pct = round(100 * len(chosen) / total) if total else 0
+    sym_note = "symmetric" if fully_symmetric else f"hybrid ({sym_count} symmetric + {len(chosen)-sym_count} top-up)"
     print(f"-> {out}")
     print(f"   {len(chosen)} cloud tiles (o:[1]) = {pct}% of {total} tiles | axis={axis} | "
-          f"layers={sorted(place_layers)} | all covered-at-start + symmetric | solvability unchanged")
+          f"layers={sorted(place_layers)} | all covered-at-start | {sym_note} | solvability unchanged")
     if len(chosen) < target:
-        print(f"   NOTE: {len(chosen)}/{target} placed — the symmetric covered+VISIBLE pool on layers "
-              f"{sorted(place_layers)} is limited (kept symmetry over count). If ~0, the layout is likely "
-              f"COLUMNAR (bottom cells fully hidden); use a STAGGERED layout (gen-layout uniform_stagger).")
+        print(f"   NOTE: {len(chosen)}/{target} placed — the covered+VISIBLE pool on layers "
+              f"{sorted(place_layers)} is exhausted. If ~0, the layout is likely COLUMNAR (bottom cells "
+              f"fully hidden); use a STAGGERED layout (gen-layout uniform_stagger).")
 
 
 if __name__ == "__main__":

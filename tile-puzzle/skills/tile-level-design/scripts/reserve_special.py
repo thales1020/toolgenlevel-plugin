@@ -100,16 +100,16 @@ def _bbox(cells):
     return min(xs) - 0.5, max(xs) + 0.5, min(ys) - 0.5, max(ys) + 0.5   # cells are 1×1
 
 
-def _find_placements(board, rng, half):
+def _find_placements(board, rng, half, stacks=()):
     """Candidate sites for a special of collision `half` (1.0 = 2×2, 1.5 = 3×3). Returns
     [(cov_above, cx, cy, L)]. Centres are drawn from a 0.5 GRID near the tiles — BOTH the neat cluster
     centres AND the ~½-cell-OFFSET (straddling) ones — and OFFSET positions are PREFERRED: a special
     shifted ~½ a cell straddles the grid so MANY normals each cover only ~half of it (it peeks out
     around them, like the real game) instead of sitting snug in one cluster.
-    A site is valid iff: the whole footprint (centre ± half) lies WITHIN the layout bbox; it covers ≥1
-    real tile below (partial cover OK); and ≥1 tile sits above it (covered at start → no immediate
-    auto-clear). L = the interstitial layer (special goes on 2L+1). Ordered: highest layer (visible),
-    then MOST straddle (offset), then fewest coverers."""
+    A site is valid iff: the whole footprint (centre ± half) lies WITHIN the layout bbox; it does NOT
+    overlap any STACK column (rule 4); it covers ≥1 real tile below (partial cover OK); and ≥1 tile sits
+    above it (covered at start → no immediate auto-clear). L = the interstitial layer (special goes on
+    2L+1). Ordered: highest layer (visible), then MOST straddle (offset), then fewest coverers."""
     cells = board.all_cells()
     x0, x1, y0, y1 = _bbox(cells)
     thr = half + 0.5                                  # a 1×1 cell is under the footprint iff |offset| < thr
@@ -124,6 +124,9 @@ def _find_placements(board, rng, half):
     for (cx, cy) in centres:
         if cx - half < x0 - 1e-9 or cx + half > x1 + 1e-9 or cy - half < y0 - 1e-9 or cy + half > y1 + 1e-9:
             continue                                  # footprint would stick out of the layout
+        # rule 4: the footprint must not overlap a STACK column (stack cell = 1×1, half 0.5)
+        if any(abs(sx - cx) < half + 0.5 and abs(sy - cy) < half + 0.5 for (sx, sy) in stacks):
+            continue
         per_layer = {}
         straddle = 0                                  # cells only PARTIALLY under the footprint (offset → many)
         for c in cells:
@@ -184,6 +187,36 @@ def _all_specials_covered(board, sids, halves):
     return True
 
 
+def _overlapping_specials_separated(board, sids, halves):
+    """Rule 6 (anti chain-reveal): whenever two specials' footprints OVERLAP, there must be a NORMAL tile
+    on a layer STRICTLY BETWEEN them, inside the overlap region. Otherwise clearing the upper special
+    exposes the lower one directly, which then auto-clears for free (the 'mission tự biến mất' bug). This
+    is STRICTER than merely putting overlapping specials on distinct layers — special-directly-on-special
+    with nothing between is rejected here even though _all_specials_covered would accept it."""
+    cells = board.all_cells()
+    specials = [c for c in cells if c.tile_id in sids]
+    normals = [c for c in cells if c.tile_id not in sids]
+
+    def _half(c):
+        return halves.get((round(c.x, 4), round(c.y, 4), c.layer_idx), 1.0)
+
+    for i in range(len(specials)):
+        for j in range(i + 1, len(specials)):
+            a, b = specials[i], specials[j]
+            ha, hb = _half(a), _half(b)
+            if abs(a.x - b.x) < ha + hb and abs(a.y - b.y) < ha + hb:      # footprints overlap
+                lo, hi = sorted((a.layer_idx, b.layer_idx))
+                if lo == hi:                                              # same layer → neither covers the other
+                    return False
+                sep = any(lo < n.layer_idx < hi
+                          and abs(n.x - a.x) < ha + 0.5 and abs(n.y - a.y) < ha + 0.5
+                          and abs(n.x - b.x) < hb + 0.5 and abs(n.y - b.y) < hb + 0.5
+                          for n in normals)
+                if not sep:
+                    return False
+    return True
+
+
 def main():
     ap = argparse.ArgumentParser(description="Add bonus/mission special tiles as interstitial 2×2 covers (direction C).")
     ap.add_argument("layout", help="EMPTY layout JSON (no tiles)")
@@ -232,6 +265,10 @@ def main():
     n_special = len(want)
     halves_needed = sorted(set(h for (_, h) in want))
 
+    # STACK columns (rule 4): specials must never overlap a stack. Read (x,y) from the layout file.
+    _layout_data = json.load(open(a.layout, encoding="utf-8"))
+    stack_xy = [(float(s["x"]), float(s["y"])) for s in (_layout_data.get("stacks") or [])]
+
     best_placed = 0
     for seed in range(1, a.seeds + 1):
         nb = _gen_normal_level(a.layout, a.color_count, a.distance, seed)
@@ -242,26 +279,37 @@ def main():
         if (a.smin is not None and fs < a.smin) or (a.smax is not None and fs > a.smax):
             continue
         rng = random.Random(seed * 131 + 7)
-        cand_by_half = {h: _find_placements(nb, rng, h) for h in halves_needed}
-        # assign each wanted special a site; chosen footprints must not overlap each other
+        cand_by_half = {h: _find_placements(nb, rng, h, stack_xy) for h in halves_needed}
+        # Assign each wanted special a site. Rules enforced here:
+        #   5 = distinct (cx,cy) even across layers; 6(proxy) = two OVERLAPPING specials on DISTINCT
+        #   layers (the full 'normal tile between them' check runs post-build); 7 = EVEN spread — prefer
+        #   the interstitial layer with FEWEST specials, then FARTHEST from those already placed
+        #   (farthest-first), then the pre-sort order (straddle/visibility) as a final tie-break.
         chosen = []                         # (cx, cy, L, half)
-        used = set()                        # exact (cx,cy,L) already taken
+        used_xy = set()                     # (cx,cy) already taken (rule 5: distinct coords)
+        layer_count = {}                    # final special layer 2L+1 -> #specials (rule 7)
         for (sid, half) in want:
-            got = None
-            for (cov, cx, cy, L) in cand_by_half[half]:
-                if (cx, cy, L) in used:
-                    continue                # not the identical site
-                # overlap IS allowed, but two OVERLAPPING specials must NOT share the final layer (2L+1),
-                # else neither covers the other and a lower one auto-clears while the other sits on it.
-                # Force overlapping specials onto DISTINCT layers -> a clear higher/lower cover relationship.
+            best = None; best_key = None
+            for idx, (cov, cx, cy, L) in enumerate(cand_by_half[half]):
+                if (cx, cy) in used_xy:
+                    continue                                    # rule 5
                 if any(pL == L and abs(cx - px) < (half + ph) and abs(cy - py) < (half + ph)
                        for (px, py, pL, ph) in chosen):
-                    continue
-                got = (cx, cy, L, half); break
-            if got is None:
+                    continue                                    # rule 6 proxy: overlap -> distinct layer
+                dmin = min((abs(cx - px) + abs(cy - py) for (px, py, pL, ph) in chosen), default=1e9)
+                # spec §5.3 order (designer doc is authoritative): rule 7 EVEN spread first (fewest-on-
+                # layer), then FARTHEST-FIRST spatial spread (-dmin). cov (fewest-coverers = more visible)
+                # and the straddle pre-sort (idx) are lower nudges — they refine ties without overriding
+                # the doc's spread. Note: any residual burial is rule 7 forcing a big footprint onto a low
+                # interstitial (the doc mandates even spread and has no anti-burial rule) — accepted.
+                key = (layer_count.get(2 * L + 1, 0), -dmin, cov, idx)
+                if best is None or key < best_key:
+                    best_key = key; best = (cx, cy, L, half)
+            if best is None:
                 break
-            used.add((got[0], got[1], got[2]))
-            chosen.append(got)
+            used_xy.add((best[0], best[1]))
+            layer_count[2 * best[2] + 1] = layer_count.get(2 * best[2] + 1, 0) + 1
+            chosen.append(best)
         best_placed = max(best_placed, len(chosen))
         if len(chosen) < n_special:
             continue                       # this seed can't host them all — try another
@@ -275,6 +323,8 @@ def main():
             continue
         if not _all_specials_covered(board, sids_set, sh_map):
             continue
+        if not _overlapping_specials_separated(board, sids_set, sh_map):
+            continue                        # rule 6: overlapping specials need a normal tile between them
         cells = board.all_cells()
         n_normal = sum(1 for c in cells if c.tile_id not in sids_set)
         assert n_normal % 3 == 0, "normals not ÷3 — bug"
@@ -294,8 +344,10 @@ def main():
                 "stacks": nb._stacks if hasattr(nb, "_stacks") else [],
                 "metadata": {"source": f"reserve_{kind}",
                              "special_counts": {str(s): reserve_spec[s] for s in sorted(reserve_spec)},
+                             "special_layers": {str(L): c for L, c in sorted(layer_count.items())},
                              "normal_tiles": n_normal, "normal_score": round(fs, 2),
                              "solvable_v3_special": True, "specials_covered_at_start": True,
+                             "rules_ok": "bbox+stack-free+distinct-xy+overlap-separated+even-layer",
                              "placement": f"interstitial covers (direction C); bonus={a.bonus_cover or 'auto-mix'} mission={a.mission_cover or 'auto-mix'}"}}
         out = a.out or a.layout.replace(".json", f"_{kind}.json").replace("NewLayout_", f"Level_{kind}_")
         json.dump(data, open(out, "w", encoding="utf-8"), separators=(",", ":"), ensure_ascii=False)

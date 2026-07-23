@@ -39,7 +39,11 @@ _C0, _C_INTRA, _C_COVER, _C_NTYPES, _C_MYSTERY = -28.42, 0.655, 0.804, 2.897, 22
 def compute_new_diffscore(board, weights, is_mystery):
     """The validated formula. Returns a float clamped at >= 0."""
     s = DifficultyScorer.compute_full_score(board, weights=weights)
-    n_types = len({c.tile_id for c in board.all_cells()})
+    # n_types counts specials, but 1001 (bonus) + 1002 (mission) collapse to ONE bucket
+    # (spec §4.1: "special 1001/1002 tính là 1 loại"). Normal ids + 1 iff any special present.
+    ids = {c.tile_id for c in board.all_cells()}
+    normal_ids = {i for i in ids if i < 1000}
+    n_types = len(normal_ids) + (1 if any(i >= 1000 for i in ids) else 0)
     val = (_C0 + _C_INTRA * s["intra_group"] + _C_COVER * s["cover100"]
            + _C_NTYPES * n_types + _C_MYSTERY * (1 if is_mystery else 0))
     return max(0.0, val), s, n_types

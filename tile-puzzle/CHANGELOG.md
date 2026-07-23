@@ -1,5 +1,29 @@
 # Changelog — tile-puzzle
 
+## 0.5.4
+
+Aligns the generators/scorer to the game designer's authoritative spec docs
+(TileLevel_AI_KnowledgeBase §4-7, LevelFormat_Standard). Audited every requirement against the code;
+fixed the divergences below (footprints/thresholds, `sl`, interstitial even/odd, injective sprites
+already matched — untouched).
+
+- **Special placement now enforces all 7 rules** (`reserve_special.py`, §5.1). Added the three that were
+  missing/partial: **(4) never overlaps a STACK column**; **(5) distinct (x,y)** — two specials can no
+  longer share a coordinate on different layers; **(7) even layer spread** — farthest-first + prefer the
+  interstitial layer with the fewest specials (was: pile all onto the highest layer). **Rule 6 hardened**
+  from "distinct layers" to "a NORMAL tile must sit on a layer BETWEEN two overlapping specials" — this
+  blocks the chain-reveal / "mission tự biến mất" auto-clear at generation time (unit-tested).
+- **Cloud symmetry is now HYBRID, coverage 15-20%** (`add_cloud.py`, spec PHẦN 6 / bug #10). The old hard
+  symmetry gate left ~1/4 of cloud levels with 0 clouds; now symmetric orbits fill first, then any
+  covered+visible cell tops up to target — never 0 clouds when candidates exist. Default `--cloud-pct`
+  33 → 18.
+- **Mystery count is context-aware + evenly placed** (`add_special_cells.py`, spec PHẦN 7 / bug #11).
+  Default count: **5** alone / **4** with Mission/Bonus / **3** with Cloud (was random 3-5). Placement is
+  now EVEN across layers, **≤2 per layer**, only over layers holding a real normal tile.
+- **`new_diffScore` n_types collapses specials** (`diff_score.py`, spec §4.1). Bonus (1001) + Mission
+  (1002) count as ONE type bucket, not two — a mixed mission+bonus level is +1, not +2. Mission-only /
+  bonus-only unchanged.
+
 ## 0.5.3
 
 - **Fixed the 3-tiles-do-not-match display bug.** Two DIFFERENT tile types could be drawn with the SAME
