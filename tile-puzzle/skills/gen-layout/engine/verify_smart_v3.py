@@ -110,16 +110,9 @@ def solve_v3(board, max_expansions=None, verbose=False):
         changed = True
         new_active = active
         atomic_picks = 0
-        while changed:
+        by_type_local = by_type          # DEDUP: first pass reuses the mask/grouping computed above
+        while changed:                   # (new_active == active on entry) — recompute only AFTER a change
             changed = False
-            pickable_mask_local = compute_pickable(new_active)
-            by_type_local = {}
-            p = pickable_mask_local
-            while p:
-                low = p & -p
-                i = low.bit_length() - 1
-                p ^= low
-                by_type_local.setdefault(tile_ids[i], []).append(i)
             cur_tsize = tray_size(tray)
             for tid, lst in by_type_local.items():
                 existing = tray_count(tray, tid)
@@ -137,6 +130,14 @@ def solve_v3(board, max_expansions=None, verbose=False):
                     atomic_picks += needed
                     changed = True
                     break
+            if changed:                  # new_active advanced -> recompute grouping for the next pass
+                by_type_local = {}
+                p = compute_pickable(new_active)
+                while p:
+                    low = p & -p
+                    i = low.bit_length() - 1
+                    p ^= low
+                    by_type_local.setdefault(tile_ids[i], []).append(i)
         if new_active != active:
             if new_active == 0:
                 if depth + atomic_picks > stats["best_depth"]:

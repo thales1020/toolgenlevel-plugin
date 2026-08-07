@@ -316,10 +316,11 @@ def main():
         placements = [(cx, cy, L, sid, half)
                       for (cx, cy, L, half), (sid, _) in zip(chosen, want)]
         board, sh_map = _build_with_specials(nb, placements)
-        # rigorous solvability with special auto-clear + per-special 2×2/3×3 footprint
+        # rigorous solvability with special auto-clear + per-special 2×2/3×3 footprint. A solvable board
+        # returns True fast (a win is found in ~tens of k expansions); only UNSOLVABLE boards run to the
+        # cap, so a single modest cap keeps rejection fast — the old extra 2M pass just made every
+        # unsolvable candidate cost ~60s for no added certainty (200k True is already proof of solvable).
         if solve_v3_special(board, special_ids=sids, max_expansions=200_000, special_halves=sh_map)[0] is not True:
-            continue
-        if solve_v3_special(board, special_ids=sids, max_expansions=2_000_000, special_halves=sh_map)[0] is not True:
             continue
         if not _all_specials_covered(board, sids_set, sh_map):
             continue

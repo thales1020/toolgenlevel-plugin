@@ -168,18 +168,9 @@ def solve_v3_special(board, special_ids=(1001, 1002), max_expansions=None, verbo
 
         # --- atomic triple collapse (normal types only) ---
         changed = True; new_active = active; atomic_picks = 0
+        bt = by_type                                     # DEDUP: first pass reuses grouping (active already auto_cleared)
         while changed:
             changed = False
-            na = auto_clear(new_active)                  # settle specials between collapses
-            if na != new_active:
-                new_active = na
-            pml = compute_pickable(new_active)
-            bt = {}
-            p = pml
-            while p:
-                low = p & -p; i = low.bit_length() - 1; p ^= low
-                if tile_ids[i] >= 0:
-                    bt.setdefault(tile_ids[i], []).append(i)
             cur_tsize = tray_size(tray)
             for tid, lst in bt.items():
                 existing = tray_count(tray, tid); needed = 3 - existing
@@ -191,6 +182,16 @@ def solve_v3_special(board, special_ids=(1001, 1002), max_expansions=None, verbo
                     if existing > 0:
                         tray = tray - (existing << (tid * 2))
                     atomic_picks += needed; changed = True; break
+            if changed:                                  # advanced -> settle specials + regroup for next pass
+                na = auto_clear(new_active)
+                if na != new_active:
+                    new_active = na
+                bt = {}
+                p = compute_pickable(new_active)
+                while p:
+                    low = p & -p; i = low.bit_length() - 1; p ^= low
+                    if tile_ids[i] >= 0:
+                        bt.setdefault(tile_ids[i], []).append(i)
         new_active = auto_clear(new_active)
         if new_active != active:
             if new_active == 0:

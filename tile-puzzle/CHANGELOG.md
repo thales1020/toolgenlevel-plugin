@@ -1,5 +1,25 @@
 # Changelog — tile-puzzle
 
+## 0.7.1 — level-gen speed (zero behavior change)
+
+Optimizes generation wall-clock; the delivered levels are unchanged in quality (every level still
+verified v3-solvable). Profiling showed `solve_v3`/`solve_v3_special` (~0.8–1.5s/call) dominates the
+rejection-sampling loop; everything else (TEEngine gen 1ms, scorer 49ms, greedy 97ms) is noise.
+
+- **`gen_pattern.py`: cheap gates BEFORE the expensive solve.** The greedy fail metric (P1) and the
+  structural top-half check (P2) now run before `solve_v3`, so failing candidates skip the solve
+  entirely → P1/P2 ~13–32s → ~1–2s (~10×). Same acceptance criteria, so output quality is unchanged.
+- **`gen_pattern.py`: `--workers N`** — optional multiprocessing (default 1) that splits the attempt
+  budget across processes; first hit wins. For genuinely slow searches (hard targets, custom patterns).
+- **`reserve_special.py`: dropped the redundant in-loop 2M solve.** The 200k pass already proves
+  solvability (True comes fast); the old 2M pass only ran on already-True boards → pure waste that cost
+  ~60s per unsolvable candidate. **Outcome-identical.**
+- **Solver dedup (`verify_smart_v3.py` ×2 copies + `solve_special.py`):** the atomic-triple collapse
+  recomputed `compute_pickable` + the type grouping on its first pass even though the values were just
+  computed one line above. Now reused → **solve_v3 ~34% faster** (1150→755ms). Verified **bit-identical**
+  `(status, depth, expansions)` over a 55-board oracle (solvable / unsolvable / cap-hit, incl. specials);
+  engine byte-parity intact; `test_special_solver.py` 14/14.
+
 ## 0.7.0
 
 - **New `scripts/gen_pattern.py` — ONE parameterized tool for all 6 design patterns (SKILL.md §4) on ANY

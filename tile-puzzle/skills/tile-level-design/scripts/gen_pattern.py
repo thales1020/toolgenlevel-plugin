@@ -43,6 +43,8 @@ from tile_level_simulator import (Board, Layer, Cell, TEEngine, DifficultyScorer
 from verify_smart_v3 import solve_v3
 
 TRAY = 7
+SOLVE_CAP = 100_000          # solvable boards find a win in ~25k expansions; unsolvable exhaust the cap,
+                             # so keep this modest so rejection of unsolvable candidates stays fast.
 _SAMPLES = os.path.join(os.path.dirname(HERE), "sample_layouts")
 WEIGHTS = load_scoring_weights()
 
@@ -293,6 +295,18 @@ def pat_teengine(ctx, a, structural=None, want_fail=None, metric="greedy", label
         nt = len(set(tile_ids))
         if nt < 3:                                          # (--color-count only SEEDS cc; ÷3 repair may shift nt)
             continue
+        # CHEAP discriminators FIRST (tile_ids / greedy ≈ 0.1s) — reject BEFORE the ~1.5s solve_v3.
+        if structural is not None and not structural(tile_ids):
+            continue                                        # P2: top-half easy (tile_ids only)
+        if want_fail is not None:                           # P1: fail-rate IS the target -> gate before solve
+            fq, _ = playout(tile_ids, bb, n, metric, 30)
+            if fq < 0.5:
+                continue
+            fr, ac = playout(tile_ids, bb, n, metric, 300)
+            if fr < want_fail:
+                continue
+        else:
+            fr = ac = None
         board = _clone_board(positions, tile_ids)
         if a.score_min is not None or a.score_max is not None:
             s = _score(board)
@@ -302,20 +316,9 @@ def pat_teengine(ctx, a, structural=None, want_fail=None, metric="greedy", label
                 continue
         else:
             s = None
-        if not _solvable(board, 100_000):
+        if not _solvable(board, SOLVE_CAP):                 # EXPENSIVE — runs only on survivors
             continue
         checked += 1
-        if structural is not None and not structural(tile_ids):
-            continue
-        if want_fail is not None:
-            fq, _ = playout(tile_ids, bb, n, metric, 30)
-            if fq < 0.5:
-                continue
-            fr, ac = playout(tile_ids, bb, n, metric, 300)
-            if fr < want_fail:
-                continue
-        else:
-            fr = ac = None
         info = {"pattern": label, "n_types": nt, "score": (round(s, 1) if s is not None else None),
                 "fail_rate": (round(fr, 2) if fr is not None else None),
                 "avg_cleared": (round(ac, 1) if ac is not None else None),
@@ -602,6 +605,35 @@ def _make_structural(ctx, triple_frac_min):
     return gate
 
 
+# ───────────────────────── dispatch + parallel worker ─────────────────────────
+
+def run_pattern(ctx, a):
+    """Run one pattern search in-process. Returns (tile_ids, info) or None."""
+    if a.pattern == 1:
+        return pat_teengine(ctx, a, want_fail=(a.fail_rate if a.fail_rate is not None else 0.90),
+                            metric=a.metric, label="trap")
+    if a.pattern == 2:
+        return pat_teengine(ctx, a, structural=_make_structural(ctx, a.triple_frac), label="easytop")
+    if a.pattern == 3:
+        return pat_bridge(ctx, a)
+    if a.pattern == 4:
+        return pat_custom_clear(ctx, a)
+    if a.pattern == 5:
+        return pat_guided(ctx, a)
+    return pat_teengine(ctx, a, label="score")               # 6
+
+
+def _worker(payload):
+    """multiprocessing worker: seed its own RNG, run its slice of attempts. The attempts are independent,
+    so N workers each searching with a distinct seed ≈ N× faster to the first hit."""
+    ctx, a, seed = payload
+    random.seed(seed)
+    try:
+        return run_pattern(ctx, a)
+    except SystemExit:                                        # e.g. no 6a+3b config on a tiny board
+        return None
+
+
 # ───────────────────────────────── main ─────────────────────────────────
 
 def main():
@@ -610,6 +642,8 @@ def main():
     ap.add_argument("--layout", required=True, help="bare id (L20), filename, or path")
     ap.add_argument("--out", default="")
     ap.add_argument("--attempts", type=int, default=2000, help="rejection-sampler budget (default 2000)")
+    ap.add_argument("--workers", type=int, default=1,
+                    help="parallel processes (default 1). >1 splits attempts across workers, first hit wins")
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--color-count", type=int, default=None,
                     help="SEED the engine color_count (P1/P2/P6; final n_types may shift after ÷3 repair)")
@@ -626,28 +660,32 @@ def main():
 
     random.seed(a.seed)
     path = _resolve_layout(a.layout)
-    positions, n_layers = _load_trimmed(path)
+    positions, n_layers = _load_trimmed(path)                # deterministic trim (seeded above)
     bb, bc = _build_bb(positions)
     n = len(positions)
     ctx = {"positions": positions, "bb": bb, "bc": bc, "n": n, "n_layers": n_layers}
+    workers = max(1, a.workers)
     print(f"layout={os.path.basename(path)}  cells={n} (÷3)  layers={n_layers}  pattern={a.pattern}  "
-          f"attempts={a.attempts}  score_gate={'on' if (a.score_min or a.score_max) else 'OFF'}", flush=True)
+          f"attempts={a.attempts}  workers={workers}  score_gate={'on' if (a.score_min or a.score_max) else 'OFF'}",
+          flush=True)
+    if a.pattern == 6 and a.score_min is None and a.score_max is None:
+        print("  WARN: pattern 6 with NO --score-min/--score-max -> trivially EASY level (see SKILL sec.4).", flush=True)
 
-    if a.pattern == 1:
-        res = pat_teengine(ctx, a, want_fail=(a.fail_rate if a.fail_rate is not None else 0.90),
-                           metric=a.metric, label="trap")
-    elif a.pattern == 2:
-        res = pat_teengine(ctx, a, structural=_make_structural(ctx, a.triple_frac), label="easytop")
-    elif a.pattern == 3:
-        res = pat_bridge(ctx, a)
-    elif a.pattern == 4:
-        res = pat_custom_clear(ctx, a)
-    elif a.pattern == 5:
-        res = pat_guided(ctx, a)
-    else:  # 6
-        if a.score_min is None and a.score_max is None:
-            print("  WARN: pattern 6 with NO --score-min/--score-max -> trivially EASY level (see SKILL sec.4).", flush=True)
-        res = pat_teengine(ctx, a, label="score")
+    if workers > 1:
+        import math
+        from multiprocessing import Pool
+        per = max(1, math.ceil(a.attempts / workers))        # split the budget across workers
+        payloads = [(ctx, argparse.Namespace(**{**vars(a), "attempts": per}), a.seed + 1 + i * 7919)
+                    for i in range(workers)]
+        res = None
+        with Pool(workers) as pool:
+            for r in pool.imap_unordered(_worker, payloads):
+                if r is not None:                            # first worker to hit wins; stop the rest
+                    res = r
+                    pool.terminate()
+                    break
+    else:
+        res = run_pattern(ctx, a)
 
     if res is None:
         print(f"NO candidate in {a.attempts} attempts — raise --attempts, widen/disable the score band, "
