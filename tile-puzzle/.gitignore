@@ -2,3 +2,10 @@
 __pycache__/
 *.pyc
 desktop.ini
+
+# winrate-target: artifact sinh ra luc chay, khong phai nguon
+skills/winrate-target/analysis/gen_*.json
+skills/winrate-target/analysis/drift_status.json
+
+# Log runtime cua engine (sinh ra khi chay, khong phai nguon)
+*.log

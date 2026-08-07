@@ -4,6 +4,10 @@ description: Five proven level-design patterns — trap ẩn, easy-top-hard-bott
 type: project
 originSessionId: 9cb29a82-5617-4dd8-9f97-2bb165e50048
 ---
+> ⚠️ **Numbering note:** this catalog uses the ORIGINAL research numbering. The productized tool
+> `scripts/gen_pattern.py --pattern N` follows **SKILL.md §4** as canonical (there P3=bridge, P4=clear50,
+> P5=guided). Use SKILL.md §4 to map `--pattern` numbers; this file is background rationale only.
+
 ## 5 Pattern thiết kế level
 
 ### Pattern 1: Level trap ẩn

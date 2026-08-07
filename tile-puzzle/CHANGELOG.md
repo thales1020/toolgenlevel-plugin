@@ -1,5 +1,76 @@
 # Changelog — tile-puzzle
 
+## 0.7.0
+
+- **New `scripts/gen_pattern.py` — ONE parameterized tool for all 6 design patterns (SKILL.md §4) on ANY
+  layout.** Replaces the per-layout one-off research templates (`find_trap_fast` / `find_easy_*` /
+  `find_bridge_L21` / `find_clear50_trap` / `find_guided_trap_L21`), which were pinned to L20/L21/L50 and
+  are kept in `templates/` as provenance. Every hardcoded geometry constant is now derived from the given
+  layout (top-half / 3-band partitions, the `6a+3b=n` easy/trap config solver).
+  - `--pattern 1..6 --layout <id|path>`: 1 trap (player fail-rate, `--metric greedy|random`), 2 easytop
+    (structural top-half triple-frac), 3 bridge (easy + recurring bridge types + trap zones), 4 clear50
+    (easy-top/trap-bottom, greedy clears a target band), 5 guided (steep top-band gradient), 6 score
+    (score band only).
+  - The 6 duplicated greedy-playout copies are consolidated into one `playout(mode='greedy'|'random')`
+    metric. Greedy is an EVALUATOR (filter stage), never a generator.
+  - Score gate is OFF by default (per-layout-tuned bands rejected ~everything elsewhere); enable with
+    `--score-min/--score-max`. `--attempts` (default 2000) is a rejection-sampler budget.
+  - P4/P5 (custom clear-target) are geometry-sensitive: they hit the clear band on layouts with depth,
+    else return a **best-effort** level (metadata `in_band` + `note`), and honestly report "no candidate"
+    on degenerate (e.g. 2-layer) layouts. P1/P2/P3/P6 generalize cleanly. All patterns verify v3-solvable
+    and emit game stones format.
+- **Cleanup:** removed 3 superseded difficulty-sweep artifacts (`data/difficulty_minmax_strategy.csv`,
+  `templates/difficulty_minmax_strategy_parallel.py`, `templates/difficulty_minmax_custom.py`) — replaced
+  by the kept `difficulty_minmax_combined.*` / `difficulty_minmax_solvable_parallel.py`; verified 0 code
+  imports and 0 doc references before removal (~254K).
+
+## 0.6.0 — new skill `winrate-target` (design by REAL-PLAYER metric)
+
+Purely **additive**: the three existing skills are untouched (byte-identical to 0.5.4). Adds a fourth
+skill for a different question.
+
+**What it answers.** The other skills answer *"give me the shape/level I have in mind"* and score the
+board's **static** difficulty (`diffScore`). `winrate-target` answers *"give me a level where REAL
+PLAYERS behave like X at stage Y"* — e.g. *"a symmetric level whose first-attempt win rate is 87% at
+late"*, or *"keep layout 54's shape but make booster usage ~17% at early"*.
+
+**How.** A 3-layer model fitted on real play logs (508k plays, 28,750 players, 790 levels):
+
+1. `beta` — intrinsic board difficulty from 36 features (10 static + 26 from bot simulation).
+2. **Survival Theta** — the player-skill distribution at that exact level position, via the inverse
+   Mills ratio of the survival funnel. Uses `E[sigmoid(theta - beta)]`, *not* `sigmoid(mean theta)`
+   (Jensen's inequality: the naive version pushes MAE to 16.4).
+3. Residual heads for 9 metrics — Ridge (alpha per head by cross-validation) plus Gradient Boosting
+   where CV shows it genuinely wins (currently 7/9 heads). Ridge coefficients stay in the JSON as an
+   inspectable fallback if `heads_gbm.joblib` is missing or built by another sklearn version.
+
+**Nine metrics.** `win_rate` (first attempt) · `win_att` · duration · `revive` · `booster` ·
+`near_miss` · `undo` · `shuffle` · `magnet`.
+
+**Refuses to extrapolate — on purpose.** Generation is seeded from real levels near the target and
+constrained to their feature bounds. When a target lies outside the observed distribution the tool
+reports `KHONG DAT MUC TIEU` rather than inventing a confident number. (Demonstrated: forcing the
+linear head to beta=+20 predicts *131% of players use a booster* — the guard exists to stop exactly
+that reaching a designer.)
+
+**Honest limits** (see `skills/winrate-target/SKILL.md` §6):
+
+- `booster`/`revive` measure **item-usage rate**, not revenue — the logs contain no purchase events.
+- Four metrics are still unreliable at `late` (`undo`, `near_miss`, `shuffle`, `magnet`).
+- The `[N]` skill-level slot only affects `win_rate`/`win_att`/`near_miss`; the six linear heads
+  ignore it.
+- Layer 1 (`beta`) is deliberately **never** recalibrated — it is the fixed measuring stick that
+  keeps designs comparable across cohorts. Only theta and the heads are refitted.
+
+**Tooling.** `scripts/recalibrate.py` refits the model from a raw cohort CSV (`--dry-run` prints a
+before/after MAE table first); `scripts/eval_cohort.py --check-drift` scores the current model against
+other cohorts and writes a drift status that every CLI run then surfaces as a banner.
+
+Verified before merge: `tests/check_engine_parity.py` passes; the new skill borrows
+`skills/gen-layout/engine` (no third engine copy); `gen`/`target`/`info` all run from the new path.
+The 0.5.4 `n_types` change (specials collapsing to one bucket) does **not** affect this model — 0 of
+the 939 cached levels contain specials, and generation excludes specials from the count.
+
 ## 0.5.4
 
 Aligns the generators/scorer to the game designer's authoritative spec docs

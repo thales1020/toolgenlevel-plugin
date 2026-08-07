@@ -94,24 +94,27 @@ Median solvable score ≈ 11 (from 4964 samples); max ever ≈ 190 (L109, deep).
 - 2-layer window uses **effective_layer** (`#higher_layers_with_overlap + 1`)
 - Same-type subtract = -1 (NOT -N) — hidden tiles aren't "easy" from player view
 
-## 4. Six design patterns
+## 4. Six design patterns — `scripts/gen_pattern.py` (ONE parameterized tool, any layout)
 
-| # | Pattern | Method | Template |
+`python gen_pattern.py --pattern N --layout <id|path> [--out o.json] [--attempts 2000] [--seed 1]`
+Productizes all 6 patterns on ANY layout (replaces the per-layout `find_*` templates, which are kept in
+`templates/` as provenance). Output = game stones format. Score gate is OFF unless `--score-min/--score-max`.
+
+| # | Pattern | Method | Key flags |
 |---|---|---|---|
-| 1 | **Trap ẩn / 90% fail** | TEEngine + greedy fail ≥0.90 | `find_trap_fast.py` |
-| 2 | **Top N layers dễ** | TEEngine + window metric | `find_easy_first_half.py` |
-| 3 | **Easy top + trap bottom** | Custom + bridge | `find_bridge_L21.py` |
-| 4 | **Clear 50% rồi bí** | Custom + auto-strategy | `find_clear50_trap.py` ⭐ |
-| 5 | **Guided Trap** | 3-zone gradient + breadcrumbs | `find_guided_trap_L21.py` |
-| 6 | **Score X solvable** | Inline TEEngine + filter | inline (no template) |
+| 1 | **Trap ẩn / high fail** | TEEngine + player fail-rate | `--metric greedy\|random --fail-rate 0.90` |
+| 2 | **Top layers dễ** | TEEngine + structural top-half triple-frac | `--triple-frac 0.85` |
+| 3 | **Easy top + bridge + trap** | custom zone distribution | `--variant easy\|harder\|hard --bridge-types B` |
+| 4 | **Clear ~50% rồi bí** | custom, easy-top / trap-bottom | `--clear-min 0.40 --clear-max 0.60 --fail-rate 0.80` |
+| 5 | **Guided (steep gradient)** | custom, easy concentrated in top band | `--clear-min 0.20 --clear-max 0.50` |
+| 6 | **Score X solvable** | TEEngine + score band only | `--score-min --score-max` (else WARN: easy) |
 
-**Decision tree**:
-- "trap ẩn / cần booster" → P1
-- "top dễ" → P2
-- "dễ đầu khó cuối" → P3
-- "clear 50% rồi bí" → P4
-- "guided / breadcrumbs" → P5
-- "score X solvable + layout Y" → P6 (inline, fastest)
+**Decision tree**: trap → P1 · top dễ → P2 · dễ đầu khó cuối (recurring familiar tiles) → P3 · clear ~50%
+rồi bí → P4 · steep guided gradient → P5 · just score X solvable → P6.
+**Note**: P4/P5 (clear-target) are GEOMETRY-SENSITIVE — they need layer depth (3+ layers); on suitable
+layouts they hit the clear band, otherwise they return a **best-effort** level (metadata flags `in_band`
++ a `note`), and on degenerate (e.g. 2-layer) layouts they honestly report "no candidate". P1/P2/P3/P6
+generalize cleanly. All patterns verify v3-solvable before writing.
 
 ## 5. Three assignment strategies
 
