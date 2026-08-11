@@ -45,6 +45,9 @@ from verify_smart_v3 import solve_v3
 TRAY = 7
 SOLVE_CAP = 100_000          # solvable boards find a win in ~25k expansions; unsolvable exhaust the cap,
                              # so keep this modest so rejection of unsolvable candidates stays fast.
+# The 30 REAL Group_1 art ids that ship with the game (verified against reference levels). Generated levels
+# emit sequential type ids by default; --art-ids remaps onto these so they render with real sprites.
+VALID_GROUP1_IDS = [85] + list(range(142, 171))
 _SAMPLES = os.path.join(os.path.dirname(HERE), "sample_layouts")
 WEIGHTS = load_scoring_weights()
 
@@ -176,10 +179,21 @@ def _solvable(board, cap):
     return solve_v3(board, max_expansions=cap, verbose=False)[0] is True
 
 
-def _to_game_json(positions, tile_ids, meta):
+def _id_map(tile_ids, raw_ids):
+    """Map each distinct 0-based type to the emitted `i`. Default: remap onto REAL Group_1 art ids
+    (85,142-170) — a bijective per-level relabel with NO effect on difficulty/solvability (same type
+    partition) so the level ships with real sprites. Falls back to raw `tid+1` when raw_ids is set or a
+    level has more types than the 30-id art pool."""
+    distinct = sorted(set(tile_ids))
+    if not raw_ids and len(distinct) <= len(VALID_GROUP1_IDS):
+        return {t: VALID_GROUP1_IDS[k] for k, t in enumerate(distinct)}, True
+    return {t: t + 1 for t in distinct}, False
+
+
+def _to_game_json(positions, tile_ids, meta, id_map):
     by = {}
     for i, (x, y, li) in enumerate(positions):
-        by.setdefault(li, []).append({"i": tile_ids[i] + 1, "x": x, "y": y})  # display i = tile_id+1
+        by.setdefault(li, []).append({"i": id_map[tile_ids[i]], "x": x, "y": y})
     layers = [{"index": li, "stones": by[li]} for li in sorted(by)]
     return {"group": 1, "tiles": "", "layers": layers, "stacks": [], "metadata": meta}
 
@@ -656,6 +670,8 @@ def main():
     ap.add_argument("--triple-frac", type=float, default=0.85, help="P2 top-half easy fraction")
     ap.add_argument("--bridge-types", type=int, default=None, help="P3 # of bridge types (else by variant)")
     ap.add_argument("--variant", choices=("easy", "harder", "hard"), default="easy", help="P3 difficulty tier")
+    ap.add_argument("--raw-ids", action="store_true",
+                    help="emit raw sequential type ids (i=tid+1) instead of remapping to real Group_1 art ids")
     a = ap.parse_args()
 
     random.seed(a.seed)
@@ -692,8 +708,12 @@ def main():
               f"or relax --fail-rate/--clear-*.", flush=True)
         return 1
     tile_ids, info = res
+    id_map, arted = _id_map(tile_ids, a.raw_ids)
+    info["art_ids"] = "Group_1 (85,142-170)" if arted else "raw (tid+1)"
+    if not a.raw_ids and not arted:
+        print(f"  NOTE: {len(set(tile_ids))} types > {len(VALID_GROUP1_IDS)} Group_1 art ids -> raw ids", flush=True)
     meta = {"source": f"gen_pattern_{info['pattern']}", **info, "layout": os.path.basename(path)}
-    data = _to_game_json(positions, tile_ids, meta)
+    data = _to_game_json(positions, tile_ids, meta, id_map)
     out = a.out or os.path.join(os.getcwd(),
                                 f"Level_P{a.pattern}_{os.path.basename(path).replace('NewLayout_', '').replace('.json', '')}.json")
     json.dump(data, open(out, "w", encoding="utf-8"), separators=(",", ":"), ensure_ascii=False)

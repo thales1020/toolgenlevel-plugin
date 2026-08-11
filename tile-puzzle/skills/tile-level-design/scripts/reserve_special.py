@@ -67,6 +67,17 @@ def _covered(c, cells):
     return any(o.layer_idx > c.layer_idx and abs(o.x - c.x) < 1 and abs(o.y - c.y) < 1 for o in cells)
 
 
+def _ov(ax, ay, ha, bx, by, hb, circular):
+    """Footprint overlap. circular=True (a BONUS 1001 is involved -> round coin collider) uses the disc
+    test dx²+dy² < (ha+hb)²; else the SQUARE (AABB) test. Mirrors solve_special._build_visibility_2x2."""
+    thr = ha + hb
+    dx = ax - bx
+    dy = ay - by
+    if circular:
+        return dx * dx + dy * dy < thr * thr
+    return abs(dx) < thr and abs(dy) < thr
+
+
 def _gen_normal_level(layout, cc, distance, seed):
     """Full NORMAL match-3 level on `layout`, trimmed to ÷3, v3-solvable. Board or None."""
     random.seed(seed)
@@ -181,7 +192,7 @@ def _all_specials_covered(board, sids, halves):
         if sc.tile_id in sids:
             hs = _half(sc)
             if not any(c is not sc and c.layer_idx > sc.layer_idx
-                       and abs(c.x - sc.x) < hs + _half(c) and abs(c.y - sc.y) < hs + _half(c)
+                       and _ov(c.x, c.y, _half(c), sc.x, sc.y, hs, (sc.tile_id == 1001 or c.tile_id == 1001))
                        for c in cells):
                 return False
     return True
@@ -204,13 +215,14 @@ def _overlapping_specials_separated(board, sids, halves):
         for j in range(i + 1, len(specials)):
             a, b = specials[i], specials[j]
             ha, hb = _half(a), _half(b)
-            if abs(a.x - b.x) < ha + hb and abs(a.y - b.y) < ha + hb:      # footprints overlap
+            a_bonus = (a.tile_id == 1001); b_bonus = (b.tile_id == 1001)
+            if _ov(a.x, a.y, ha, b.x, b.y, hb, a_bonus or b_bonus):        # footprints overlap
                 lo, hi = sorted((a.layer_idx, b.layer_idx))
                 if lo == hi:                                              # same layer → neither covers the other
                     return False
                 sep = any(lo < n.layer_idx < hi
-                          and abs(n.x - a.x) < ha + 0.5 and abs(n.y - a.y) < ha + 0.5
-                          and abs(n.x - b.x) < hb + 0.5 and abs(n.y - b.y) < hb + 0.5
+                          and _ov(n.x, n.y, 0.5, a.x, a.y, ha, a_bonus)
+                          and _ov(n.x, n.y, 0.5, b.x, b.y, hb, b_bonus)
                           for n in normals)
                 if not sep:
                     return False

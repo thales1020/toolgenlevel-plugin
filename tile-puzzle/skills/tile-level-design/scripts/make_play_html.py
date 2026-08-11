@@ -64,6 +64,31 @@ for layer in sorted(data["layers"], key=lambda l: l["index"]):
                       "s": float(s.get("s", 0))})
         tid_seq += 1
 
+# STACKS: stacks[].stones are REAL playable tiles in a vertical pile at the stack's (x,y). Promote each
+# stone to a synthetic layer ABOVE every normal layer (first stone = bottom, last = top; only the top is
+# pickable), matching the solver's build_board convention. Without this the preview silently drops the
+# stack tiles — ~1/5 of reference levels store real tiles in stacks[].
+_maxL = max((l["index"] for l in data["layers"]), default=-1)
+for stk in data.get("stacks", []) or []:
+    sx = float(stk["x"]); sy = float(stk["y"])
+    for k, s in enumerate(stk.get("stones", []) or []):
+        i = int(s.get("i", 0))
+        is_special = i >= 1001
+        _o = s.get("o") or []
+        mystery = ((0 in _o) or bool(s.get("m"))) and not is_special
+        cloud = (1 in _o) and not is_special
+        if is_special:
+            n_special += 1
+        if mystery:
+            n_mystery += 1
+        if cloud:
+            n_cloud += 1
+        tiles.append({"id": tid_seq, "x": sx, "y": sy, "layer": _maxL + 1 + k,
+                      "tid": (0 if is_special else i - 1),
+                      "special": (i if is_special else 0), "mystery": mystery, "cloud": cloud,
+                      "s": float(s.get("s", 0))})
+        tid_seq += 1
+
 # ---- REAL ART: bundle a random tilebase + a Group_1 face per distinct type (display-only) ----
 ASSETS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "assets")
 FACE_DIR = os.path.join(ASSETS, "tile_faces")
@@ -98,6 +123,9 @@ if face_files and base_pool:
     # share a sprite, or they'd look identical yet never match). Prefer the EXACT sprite when the tile's
     # raw id (tid+1) matches a Group_1 filename (real reference levels use ids 85,142-170 → render true);
     # every other type takes an UNUSED shuffled sprite so no sprite is reused (until types > sprites).
+    # The 30 REAL Group_1 art ids shipped with the game (verified against reference levels). A level meant
+    # to ship with real sprites should use `i` values from this set (gen_pattern --art-ids does the remap).
+    VALID_GROUP1_IDS = [85] + list(range(142, 171))
     face_by_id = {int(os.path.splitext(os.path.basename(p))[0]): p
                   for p in face_files if os.path.splitext(os.path.basename(p))[0].isdigit()}
     distinct = sorted({t["tid"] for t in tiles if not t["special"]})
@@ -215,7 +243,10 @@ function specHalf(t){
   return s >= 0.85 ? 1.5 : 1.0;                         // mission tile (1002)
 }
 function halfOf(t){ return t.special ? specHalf(t) : 0.5; }
-function overlaps(a,b){ const h=halfOf(a)+halfOf(b); return Math.abs(a.x-b.x)<h && Math.abs(a.y-b.y)<h; }
+function overlaps(a,b){ const h=halfOf(a)+halfOf(b), dx=a.x-b.x, dy=a.y-b.y;
+  // BONUS (1001) = round coin -> circular collider (corners excluded); mission/normal stay square (AABB).
+  if(a.special===1001||b.special===1001) return dx*dx+dy*dy < h*h;
+  return Math.abs(dx)<h && Math.abs(dy)<h; }
 function isPickable(t){
   if(!t.active) return false;
   for(const o of state){ if(o.active && o.layer>t.layer && overlaps(o,t)) return false; }

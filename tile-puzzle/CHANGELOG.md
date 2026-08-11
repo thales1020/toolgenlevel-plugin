@@ -1,5 +1,21 @@
 # Changelog — tile-puzzle
 
+## 0.7.2 — bonus circular collider + stack rendering + art-id remap
+
+- **Bonus (1001) collides as a CIRCLE, not a box** (confirmed against the live game; the box test
+  over-covered the four corners). Every overlap pair involving a bonus now uses `dx²+dy² < (ha+hb)²`;
+  mission (1002) and normal↔normal stay square (AABB). Fixed in `solve_special._build_visibility_2x2`,
+  `make_play_html.overlaps()`, and `reserve_special`'s coverage/separation gates. **Correctness fix:** a
+  regression oracle over 55 boards changed exactly 2 (both bonus) — one flipped `unsolvable → solvable`
+  (a real game-solvable level the box test wrongly rejected by hiding a start triple), the other solved
+  faster; all normals + non-corner bonus boards unchanged. Designer spec §1.3 updated.
+- **Preview renders `stacks[].stones`.** `make_play_html` only read `layers[]` and silently dropped every
+  tile in a stack pile (~1/5 of reference levels store real tiles there). Now promoted to synthetic
+  layers above the normals (top-of-pile pickable), matching the solver's build convention.
+- **Real Group_1 art-id remap.** `VALID_GROUP1_IDS = [85] + range(142,171)` (the 30 shipped art ids).
+  `gen_pattern.py` now remaps its sequential type ids onto these by default (bijective per-level relabel,
+  no effect on difficulty/solvability) so generated levels render with real sprites; `--raw-ids` opts out.
+
 ## 0.7.1 — level-gen speed (zero behavior change)
 
 Optimizes generation wall-clock; the delivered levels are unchanged in quality (every level still

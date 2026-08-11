@@ -82,7 +82,15 @@ def _build_visibility_2x2(cells, sset, special_halves=None):
             cj = cells[j]
             if cj.layer_idx > ci.layer_idx:
                 thr = half[i] + half[j]
-                if abs(cj.x - ci.x) < thr and abs(cj.y - ci.y) < thr:
+                dx = cj.x - ci.x
+                dy = cj.y - ci.y
+                # BONUS (1001) renders as a ROUND coin -> circular collider (corners excluded);
+                # MISSION (1002) and normal↔normal stay SQUARE (AABB box). Confirmed vs the live game.
+                if ci.tile_id == 1001 or cj.tile_id == 1001:
+                    hit = dx * dx + dy * dy < thr * thr
+                else:
+                    hit = abs(dx) < thr and abs(dy) < thr
+                if hit:
                     blocked_by[i] |= 1 << j
                     blocks[j] |= 1 << i
     return blocked_by, blocks
