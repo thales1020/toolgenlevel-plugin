@@ -150,7 +150,7 @@ def solve_v3_special(board, special_ids=(1001, 1002), max_expansions=None, verbo
             active &= ~exposed
         return active
 
-    def dfs(active, tray, depth):
+    def dfs(active, tray, depth, tsize):                 # tsize = running tray_size(tray) (specials aren't trayed)
         active = auto_clear(active)                      # specials clear for free first
         stats["expansions"] += 1
         if depth > stats["best_depth"]:
@@ -179,16 +179,16 @@ def solve_v3_special(board, special_ids=(1001, 1002), max_expansions=None, verbo
         bt = by_type                                     # DEDUP: first pass reuses grouping (active already auto_cleared)
         while changed:
             changed = False
-            cur_tsize = tray_size(tray)
             for tid, lst in bt.items():
                 existing = tray_count(tray, tid); needed = 3 - existing
                 if needed <= len(lst):
-                    if cur_tsize + needed - 1 >= TRAY_SIZE:
+                    if tsize + needed - 1 >= TRAY_SIZE:
                         continue
                     for i in lst[:needed]:
                         new_active ^= 1 << i
                     if existing > 0:
                         tray = tray - (existing << (tid * 2))
+                        tsize -= existing
                     atomic_picks += needed; changed = True; break
             if changed:                                  # advanced -> settle specials + regroup for next pass
                 na = auto_clear(new_active)
@@ -208,7 +208,7 @@ def solve_v3_special(board, special_ids=(1001, 1002), max_expansions=None, verbo
             nk = (new_active, tray)
             if nk in dead:
                 return False
-            if dfs(new_active, tray, depth + atomic_picks):
+            if dfs(new_active, tray, depth + atomic_picks, tsize):
                 return True
             dead.add(nk); dead.add(key); return False
 
@@ -224,16 +224,18 @@ def solve_v3_special(board, special_ids=(1001, 1002), max_expansions=None, verbo
             tid = tile_ids[i]; tc = tray_count(tray, tid)
             if tc == 2:
                 new_tray = tray_sub3(tray_add(tray, tid), tid)
+                new_tsize = tsize - 2
             else:
-                if (tray_size(tray) + 1) >= TRAY_SIZE:
+                if (tsize + 1) >= TRAY_SIZE:
                     continue
                 new_tray = tray_add(tray, tid)
-            if dfs(active ^ (1 << i), new_tray, depth + 1):
+                new_tsize = tsize + 1
+            if dfs(active ^ (1 << i), new_tray, depth + 1, new_tsize):
                 return True
         dead.add(key); return False
 
     try:
-        result = dfs((1 << n) - 1, 0, 0)
+        result = dfs((1 << n) - 1, 0, 0, 0)      # empty tray -> tsize 0
     except _CapHit:
         return None, stats["best_depth"], stats["expansions"]
     except RecursionError:

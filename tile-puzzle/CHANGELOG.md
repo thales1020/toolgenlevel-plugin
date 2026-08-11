@@ -1,5 +1,16 @@
 # Changelog — tile-puzzle
 
+## 0.7.3 — solve_v3 tray-size threading (zero behavior change)
+
+- **`solve_v3` runs ~2.5× faster** by threading the running tray size through the DFS instead of
+  re-summing the packed tray on every node. `tray_size(tray)` was an O(n_types) loop called at each
+  expansion and each atomic pass; now the size is carried as a `tsize` argument and adjusted by ±deltas
+  (atomic triple: `-existing`; branch pick: `-2` on a completing triple, `+1` otherwise). Applied to the
+  engine solver (both `gen-layout` and `tile-level-design` copies, byte-identical) and to
+  `solve_special` (hand-mirrored). **Verified bit-identical:** a 55-board regression oracle (normals +
+  bonus/mission specials, at a 300k cap) returned identical `(status, depth, expansions)` for every
+  board — pure speed, no change to which levels are judged solvable.
+
 ## 0.7.2 — bonus circular collider + stack rendering + art-id remap
 
 - **Bonus (1001) collides as a CIRCLE, not a box** (confirmed against the live game; the box test

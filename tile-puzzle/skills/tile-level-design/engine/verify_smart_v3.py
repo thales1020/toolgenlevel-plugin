@@ -74,7 +74,7 @@ def solve_v3(board, max_expansions=None, verbose=False):
             a ^= low
         return p
 
-    def dfs(active, tray, depth):
+    def dfs(active, tray, depth, tsize):     # tsize = running tray_size(tray), threaded to avoid re-summing
         stats["expansions"] += 1
         if depth > stats["best_depth"]:
             stats["best_depth"] = depth
@@ -113,20 +113,20 @@ def solve_v3(board, max_expansions=None, verbose=False):
         by_type_local = by_type          # DEDUP: first pass reuses the mask/grouping computed above
         while changed:                   # (new_active == active on entry) — recompute only AFTER a change
             changed = False
-            cur_tsize = tray_size(tray)
             for tid, lst in by_type_local.items():
                 existing = tray_count(tray, tid)
                 needed = 3 - existing
                 if needed <= len(lst):
-                    # Intermediate tray size during atomic: peaks at cur_tsize + (needed-1)
+                    # Intermediate tray size during atomic: peaks at tsize + (needed-1)
                     # (after needed-1 picks, before the completing pick clears).
                     # Must stay < TRAY_SIZE (game over rule).
-                    if cur_tsize + needed - 1 >= TRAY_SIZE:
+                    if tsize + needed - 1 >= TRAY_SIZE:
                         continue  # atomic unsafe, try another type
                     for i in lst[:needed]:
                         new_active ^= 1 << i
                     if existing > 0:
                         tray = tray - (existing << (tid * 2))
+                        tsize -= existing          # atomic completes a triple -> tray loses `existing`
                     atomic_picks += needed
                     changed = True
                     break
@@ -146,7 +146,7 @@ def solve_v3(board, max_expansions=None, verbose=False):
             new_key = (new_active, tray)
             if new_key in dead:
                 return False
-            if dfs(new_active, tray, depth + atomic_picks):
+            if dfs(new_active, tray, depth + atomic_picks, tsize):
                 return True
             dead.add(new_key)
             dead.add(key)
@@ -182,14 +182,16 @@ def solve_v3(board, max_expansions=None, verbose=False):
             tc = tray_count(tray, tid)
             if tc == 2:
                 new_tray = tray_sub3(tray_add(tray, tid), tid)
+                new_tsize = tsize - 2                     # +1 then -3 (triple clears)
             else:
                 # game over if tray reaches TRAY_SIZE without a triple clear
-                if (tray_size(tray) + 1) >= TRAY_SIZE:
+                if (tsize + 1) >= TRAY_SIZE:
                     continue
                 new_tray = tray_add(tray, tid)
+                new_tsize = tsize + 1
 
             new_act = active ^ (1 << i)
-            if dfs(new_act, new_tray, depth + 1):
+            if dfs(new_act, new_tray, depth + 1, new_tsize):
                 return True
 
         dead.add(key)
@@ -200,7 +202,7 @@ def solve_v3(board, max_expansions=None, verbose=False):
 
     try:
         initial_active = (1 << n) - 1
-        result = dfs(initial_active, 0, 0)
+        result = dfs(initial_active, 0, 0, 0)      # empty tray -> tsize 0
     except _CapHit:
         elapsed = time.time() - start
         if verbose:
