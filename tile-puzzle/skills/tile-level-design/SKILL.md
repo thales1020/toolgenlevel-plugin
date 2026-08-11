@@ -94,6 +94,21 @@ Median solvable score ≈ 11 (from 4964 samples); max ever ≈ 190 (L109, deep).
 - 2-layer window uses **effective_layer** (`#higher_layers_with_overlap + 1`)
 - Same-type subtract = -1 (NOT -N) — hidden tiles aren't "easy" from player view
 
+### 3.2. `min_safe_choices` — "one wrong move = loss" pacing probe (`scripts/min_safe_choices.py`)
+
+Complements the STATIC `new_diffScore`: measures how FORGIVING the opening is. Walks the first
+`check_depth` steps of a proven winning path and, at each step, counts how many currently-pickable moves
+are *safe* (still lead to a winnable state). `min_safe == 1` while `total_pickable > 1` = a **bottleneck**
+(several tiles look pickable, but all but one are traps). Returns `(min_safe, step, total_pickable)` or
+`None` if unsolvable. NORMAL boards only (raises on special tiles `i≥1000` — those use `solve_special`).
+
+- CLI: `python ${CLAUDE_SKILL_DIR}/scripts/min_safe_choices.py <level.json> [check_depth]` → one line
+  `min_safe=.. step=.. total_pickable=.. bottleneck=YES|no`.
+- Import: `from min_safe_choices import min_safe_choices, count_wins_capped`.
+- The `winnable()` existence check = exhaustive DFS + tsize threading + incremental pickable (~2×, EXACT).
+  It carries NO atomic-triple collapse: every triple-forcing collapse is UNSOUND for mid-state existence
+  (over-prunes → mislabels a safe move as a trap). Do not add one.
+
 ## 4. Six design patterns — `scripts/gen_pattern.py` (ONE parameterized tool, any layout)
 
 `python gen_pattern.py --pattern N --layout <id|path> [--out o.json] [--attempts 2000] [--seed 1]`

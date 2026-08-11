@@ -1,5 +1,29 @@
 # Changelog — tile-puzzle
 
+## 0.8.0 — `min_safe_choices` difficulty probe now in the plugin (~2× faster, exact)
+
+- **New script `skills/tile-level-design/scripts/min_safe_choices.py`.** The "one wrong move = instant
+  loss" probe — walks the first `check_depth` steps of a proven winning path and counts how many of the
+  currently-pickable moves are *safe* (still lead to a winnable state); `min_safe == 1` while
+  `total_pickable > 1` is the bottleneck. Previously this lived only in project-side pacing tooling, so
+  pulling the plugin never sped it up; it is now distributed and importable
+  (`from min_safe_choices import min_safe_choices, count_wins_capped`) with a machine-readable CLI.
+- **Its `winnable()` existence oracle carries two verified-EXACT optimizations** that do NOT alter the
+  search tree (they explore the same exhaustive DFS, only cheaper per node): (1) tsize threading —
+  carry the running tray size instead of re-summing; (2) incremental `compute_pickable` — re-test only
+  the tiles a pick uncovers. **~1.8× over the tsize-threaded form alone, which is itself ~2× over a
+  plain re-summing DFS** (measured separately; not benchmarked end-to-end as one figure). Verified
+  0-divergence vs an exhaustive DFS across 9 `PYTHONHASHSEED` sweeps (~1900 boards) and end-to-end
+  `(safe, step, total)` identical to a naive implementation.
+- **NO atomic-triple collapse — by design.** Every triple-forcing collapse (solve_v3's full atomic AND
+  the "narrow" `== needed` variant) is UNSOUND for this arbitrary-mid-state existence query: it commits
+  to completing a triple first and short-circuits, which can miss a win that must start with a different
+  type (over-prune → wrongly flags a safe move as a trap → wrong difficulty). The narrow form passed a
+  53-board gate but was then caught over-pruning by a hash-seed sweep; do not re-add any collapse.
+- **NORMAL boards only:** raises on boards with special tiles (`i≥1000` auto-clear — use
+  `solve_special.solve_v3_special`). `count_wins_capped(board, cap=2)` keeps the original signature and
+  gets tsize threading only. Self-contained: builds its own 1×1-box `blocked_by` (or accepts one).
+
 ## 0.7.3 — solve_v3 tray-size threading (zero behavior change)
 
 - **`solve_v3` runs ~2.5× faster** by threading the running tray size through the DFS instead of
