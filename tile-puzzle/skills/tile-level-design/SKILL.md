@@ -109,6 +109,22 @@ are *safe* (still lead to a winnable state). `min_safe == 1` while `total_pickab
   It carries NO atomic-triple collapse: every triple-forcing collapse is UNSOUND for mid-state existence
   (over-prunes → mislabels a safe move as a trap). Do not add one.
 
+### 3.3. `parallel_sweep.first_match` — parallelize a seed/candidate sweep, keep serial semantics (`scripts/parallel_sweep.py`)
+
+Generic helper for the **bulk/target search** (many seeds or candidates, early-stop on the first that
+passes). `first_match(worker, items, predicate, on_result=None, nproc=None)` runs a **top-level picklable**
+`worker(item)` across cores and returns `(match, seen)` where `match` = the **lowest-index** item whose
+`predicate(result)` is True (ordered early-stop — the winner does NOT depend on which finishes first, so a
+parallel run accepts the SAME item a serial `for…: if ok: break` would) and `seen` = results up to it.
+
+- **Pin `PYTHONHASHSEED`** (e.g. `PYTHONHASHSEED=0 python …`): `TEEngine.generate` varies by hash seed
+  across processes, so an unpinned parallel run can pick a different (still valid) board. `first_match`
+  **refuses to run** when it's unset (override `require_hashseed=False` only for hash-independent workers).
+- `worker` must be a top-level function (no lambda/closure — spawn can't pickle those) and must NOT raise
+  (catch inside, return a sentinel). `predicate`/`on_result` run in the parent, so they may be closures.
+- Use it to parallelize a per-seed generation sweep ~N-fold on N cores with zero change to which level is
+  accepted (it's still exact-verified: solvable + on-target). Pure orchestration, not a quality trade.
+
 ## 4. Six design patterns — `scripts/gen_pattern.py` (ONE parameterized tool, any layout)
 
 `python gen_pattern.py --pattern N --layout <id|path> [--out o.json] [--attempts 2000] [--seed 1]`

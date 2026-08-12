@@ -1,5 +1,21 @@
 # Changelog — tile-puzzle
 
+## 0.8.2 — `parallel_sweep` helper: parallelize a seed/candidate sweep, keep serial semantics
+
+- **New `skills/tile-level-design/scripts/parallel_sweep.py`.** `first_match(worker, items, predicate, …)`
+  runs a top-level picklable `worker(item)` across CPU cores and returns the **lowest-index** item whose
+  `predicate(result)` is True (ordered early-stop) plus the results seen up to it. The winner is
+  deterministic — it does NOT depend on which worker finishes first — so parallelizing a seed/candidate
+  sweep accepts the SAME item a serial `for…: if ok: break` would, ~N× faster on N cores. This is the
+  generic core so the correctness invariants live in one tested place (verified: lowest-index winner
+  under scrambled finish order, parallel == serial match+seen, deterministic across runs).
+- **Guards non-reproducibility:** refuses to run unless `PYTHONHASHSEED` is pinned (spawned workers
+  reproduce serial results only when hash randomization is fixed), overridable for hash-independent workers.
+- Intended for the bulk/target-difficulty search: parallelize the per-seed generation sweep. Pure
+  orchestration — the accepted level is still exact-verified (solvable + on-target), not a quality trade.
+  (The project-side glue that binds it to `generate_one` stays project-side; it imports project pipeline
+  code and can't be a self-contained plugin script.)
+
 ## 0.8.1 — `solve_v3_special` incremental compute_pickable (~4× on hard special boards, exact)
 
 - **`solve_special.solve_v3_special` now threads the pickable mask instead of rescanning O(active) each
