@@ -1,5 +1,20 @@
 # Changelog — tile-puzzle
 
+## 0.8.1 — `solve_v3_special` incremental compute_pickable (~4× on hard special boards, exact)
+
+- **`solve_special.solve_v3_special` now threads the pickable mask instead of rescanning O(active) each
+  node.** Removing a tile — or a whole `auto_clear` cascade of specials — can only newly EXPOSE the tiles
+  it covered (`blocks[i]`); nothing already pickable becomes un-pickable. A new `_expose_set` helper
+  updates the mask for exactly those, so `compute_pickable` is no longer recomputed from scratch at the
+  node entry, inside the `auto_clear` cascade, and on every regroup after an atomic collapse. This matters
+  more than in the normal solver (which rescans in one place): **measured ~4× on hard special boards**
+  (e.g. an unsolvable L30_Mission that exhausts 55k expansions: 2.47s → 0.60s), directly attacking the
+  special-solver cost that dominates special-level generation.
+- **Exact by construction** — the pickable mask is *computed* incrementally, the search tree is unchanged.
+  Verified bit-identical `(status, depth, expansions)` on the 55-board regression oracle (incl. 7 special).
+- The normal engine `solve_v3` (`verify_smart_v3.py`) is unchanged; the same technique could be applied
+  there for normal-board gates as a follow-up.
+
 ## 0.8.0 — `min_safe_choices` difficulty probe now in the plugin (~2× faster, exact)
 
 - **New script `skills/tile-level-design/scripts/min_safe_choices.py`.** The "one wrong move = instant

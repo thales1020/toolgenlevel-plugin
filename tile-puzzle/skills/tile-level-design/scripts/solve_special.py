@@ -8,8 +8,12 @@ Win = every cell cleared (normal via triples, special via auto-clear). This keep
 COVER effect in the board (unlike the 0.3.0 shortcut that excluded them), so it is sound.
 
 Mirrors verify_smart_v3.solve_v3 (atomic-triple collapse + transposition table + cap) and returns the
-same (status, best_depth, expansions). The engine file is left byte-identical (parity); this lives in
-the skill's scripts/.
+same (status, best_depth, expansions). Additionally carries INCREMENTAL compute_pickable (0.8.1): the
+pickable mask is threaded through the DFS and updated only for the tiles a pick/auto_clear-wave uncovers
+(via `_expose_set`/`blocks`), instead of the O(active) rescan the engine solver still does — this matters
+more here because the special solver rescans in extra places (auto_clear cascade + regroup after each
+atomic collapse), so it is ~4× on hard special boards. Exact by construction (same search tree); verified
+bit-identical on the 55-board oracle incl. 7 special. This lives in the skill's scripts/.
 
 Usage (programmatic):
     from solve_special import solve_v3_special, special_halves_from_level
@@ -141,17 +145,37 @@ def solve_v3_special(board, special_ids=(1001, 1002), max_expansions=None, verbo
             a ^= low
         return p
 
-    def auto_clear(active):
-        """Remove every exposed special for free, cascading until none is pickable."""
-        while special_mask & active:
-            exposed = compute_pickable(active) & special_mask & active
+    def _expose_set(P, removed, active_new):
+        """Incremental compute_pickable after removing bitset `removed` (active_new = active & ~removed).
+        Only tiles that `removed` covered (union of blocks[i]) can newly become pickable; nothing already
+        pickable becomes un-pickable. EXACT for ANY removed set — a single tile, an atomic triple, or one
+        auto_clear cascade wave — so it keeps P == compute_pickable(active_new). O(|removed|+|candidates|)."""
+        nP = P & ~removed
+        cand = 0
+        r = removed
+        while r:
+            low = r & -r; r ^= low
+            cand |= blocks[low.bit_length() - 1]
+        cand &= active_new
+        while cand:
+            low = cand & -cand; cand ^= low
+            if not (blocked_by[low.bit_length() - 1] & active_new):
+                nP |= low
+        return nP
+
+    def auto_clear(active, P):
+        """Remove every exposed special for free, cascading until none is pickable. P is threaded and
+        updated per wave so it stays == compute_pickable(active) on return."""
+        while True:
+            exposed = P & special_mask & active
             if not exposed:
                 break
             active &= ~exposed
-        return active
+            P = _expose_set(P, exposed, active)
+        return active, P
 
-    def dfs(active, tray, depth, tsize):                 # tsize = running tray_size(tray) (specials aren't trayed)
-        active = auto_clear(active)                      # specials clear for free first
+    def dfs(active, tray, depth, tsize, P):              # P = compute_pickable(active), threaded incrementally
+        active, P = auto_clear(active, P)                # specials clear for free first
         stats["expansions"] += 1
         if depth > stats["best_depth"]:
             stats["best_depth"] = depth
@@ -162,20 +186,19 @@ def solve_v3_special(board, special_ids=(1001, 1002), max_expansions=None, verbo
         key = (active, tray)
         if key in dead:
             return False
-        pickable_mask = compute_pickable(active)
-        if pickable_mask == 0:
+        if P == 0:
             dead.add(key); return False
 
         # group pickable by NORMAL type (specials are auto-cleared, never branched)
         by_type = {}
-        p = pickable_mask
+        p = P
         while p:
             low = p & -p; i = low.bit_length() - 1; p ^= low
             if tile_ids[i] >= 0:
                 by_type.setdefault(tile_ids[i], []).append(i)
 
         # --- atomic triple collapse (normal types only) ---
-        changed = True; new_active = active; atomic_picks = 0
+        changed = True; new_active = active; new_P = P; atomic_picks = 0
         bt = by_type                                     # DEDUP: first pass reuses grouping (active already auto_cleared)
         while changed:
             changed = False
@@ -184,23 +207,23 @@ def solve_v3_special(board, special_ids=(1001, 1002), max_expansions=None, verbo
                 if needed <= len(lst):
                     if tsize + needed - 1 >= TRAY_SIZE:
                         continue
+                    removed = 0
                     for i in lst[:needed]:
-                        new_active ^= 1 << i
+                        new_active ^= 1 << i; removed |= 1 << i
+                    new_P = _expose_set(new_P, removed, new_active)
                     if existing > 0:
                         tray = tray - (existing << (tid * 2))
                         tsize -= existing
                     atomic_picks += needed; changed = True; break
             if changed:                                  # advanced -> settle specials + regroup for next pass
-                na = auto_clear(new_active)
-                if na != new_active:
-                    new_active = na
+                new_active, new_P = auto_clear(new_active, new_P)
                 bt = {}
-                p = compute_pickable(new_active)
+                p = new_P
                 while p:
                     low = p & -p; i = low.bit_length() - 1; p ^= low
                     if tile_ids[i] >= 0:
                         bt.setdefault(tile_ids[i], []).append(i)
-        new_active = auto_clear(new_active)
+        new_active, new_P = auto_clear(new_active, new_P)
         if new_active != active:
             if new_active == 0:
                 stats["best_depth"] = max(stats["best_depth"], depth + atomic_picks)
@@ -208,7 +231,7 @@ def solve_v3_special(board, special_ids=(1001, 1002), max_expansions=None, verbo
             nk = (new_active, tray)
             if nk in dead:
                 return False
-            if dfs(new_active, tray, depth + atomic_picks, tsize):
+            if dfs(new_active, tray, depth + atomic_picks, tsize, new_P):
                 return True
             dead.add(nk); dead.add(key); return False
 
@@ -230,12 +253,13 @@ def solve_v3_special(board, special_ids=(1001, 1002), max_expansions=None, verbo
                     continue
                 new_tray = tray_add(tray, tid)
                 new_tsize = tsize + 1
-            if dfs(active ^ (1 << i), new_tray, depth + 1, new_tsize):
+            nb = active ^ (1 << i)
+            if dfs(nb, new_tray, depth + 1, new_tsize, _expose_set(P, 1 << i, nb)):
                 return True
         dead.add(key); return False
 
     try:
-        result = dfs((1 << n) - 1, 0, 0, 0)      # empty tray -> tsize 0
+        result = dfs((1 << n) - 1, 0, 0, 0, compute_pickable((1 << n) - 1))   # empty tray -> tsize 0
     except _CapHit:
         return None, stats["best_depth"], stats["expansions"]
     except RecursionError:
