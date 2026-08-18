@@ -1,5 +1,14 @@
 # Tile Explorer Level Design — Complete Guide
 
+> ⚠️ **PART 1 (patterns/templates/T1-T5 numbering) is HISTORICAL/PROVENANCE-ONLY.** It predates
+> `scripts/gen_pattern.py`, which productized all 6 patterns into ONE tool with its own canonical
+> numbering (P1-P6) — see `SKILL.md §4`. The per-layout `find_*.py` templates listed below are kept in
+> `templates/` as provenance, not as the recommended way to generate a level. This file was NOT
+> audited/reconciled against SKILL.md §4 as part of the 2026-08 doc-hygiene pass (only SKILL.md ×4,
+> `docs/CLAUDE.md`, and `reference/*.md` were) — treat PART 1's specifics (script names, T1-T5 mapping,
+> speed figures) as unverified against current behavior until it gets the same pass. PART 2+ (strategies/
+> speed-optimization principles, if not pattern-routing-specific) may still be accurate — not audited either way.
+
 Tổng hợp toàn bộ kiến thức về **patterns**, **strategies**, và **speed optimization** cho việc tạo level trong Tile Explorer simulator.
 
 ---
@@ -304,7 +313,7 @@ Sweep min/max all layouts → difficulty_minmax_combined.py  → ~21min (one-tim
 | `difficulty_minmax_custom.csv` | Custom assignment min/max (wider range) | Tra cứu range Custom |
 | `difficulty_minmax_combined.csv` | True min/max (both methods) | Tra cứu trước khi gen |
 | `layout_strategy_analysis.csv` | 117 layouts: pickable/cover100/stacks/strategy | Chọn strategy theo layout |
-| `scoring_weights.json` | X=0.3, Y=0.3, Z=0.5, K=0.6 | Verify weights |
+| `scoring_weights.json` | X=0.3, Y=0.3, Z=1.0, K=0.6, D=0.5 (5 components incl. pick_div×D) | Verify weights |
 
 ### 9 Templates summary
 

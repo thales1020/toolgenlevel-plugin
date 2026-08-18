@@ -215,9 +215,10 @@ def main():
                 "random_playouts": N_PLAYOUTS,
             },
         }
-        with open("fail80_candidate.json", "w") as f:
+        _seed = sys.argv[1] if len(sys.argv) > 1 else 1
+        with open(f"fail80_s{_seed}.json", "w") as f:
             json.dump(out, f, indent=2)
-        print("\nSaved to fail80_candidate.json")
+        print(f"\nSaved to fail80_s{_seed}.json")
         return
 
     print(f"\nNO level found in {MAX_ATTEMPTS} attempts. Best fail_rate: {best_fail*100:.1f}%")

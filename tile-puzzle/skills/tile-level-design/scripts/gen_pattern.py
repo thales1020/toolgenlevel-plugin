@@ -70,22 +70,36 @@ def _covered(c, cells):
     return any(o.layer_idx > c.layer_idx and abs(o.x - c.x) < 1 and abs(o.y - c.y) < 1 for o in cells)
 
 
-def _load_trimmed(path):
-    """Load the layout and trim to ÷3 by dropping fully-exposed cells (needed for both the icon pool
-    and the 6a+3b custom configs). Returns (positions=[(x,y,layer)], n_layers)."""
+def _load_trimmed(path, allow_trim=False):
+    """Load the layout for tile assignment. If total_cells isn't ÷3, this WOULD require dropping cells
+    to partition cleanly -- that silently turns the named layout into a different one (Layout_A ->
+    Layout_A1) unless the caller explicitly opts in. Default: hard-fail (matches find_hybrid_fast.py's
+    existing behavior for the same precondition -- consistency, and this project's "never silently ship
+    degraded/altered input" rule, SKILL.md sec.15). Pass allow_trim=True (CLI: --allow-trim) to accept
+    dropping cells; the trim is then recorded in the caller's output metadata, never silent.
+    Returns (positions=[(x,y,layer)], n_layers, trim_info) where trim_info is None or
+    {"dropped_cells": N} when a trim actually happened."""
     board = load_board_from_file(path)
     if board is None:
         raise SystemExit(f"could not load board from {path} (absolute path required on Windows)")
     cells = board.all_cells()
     rem = len(cells) % 3
+    trim_info = None
     if rem:
+        if not allow_trim:
+            raise SystemExit(
+                f"layout {path} has {len(cells)} cells, not divisible by 3 ({rem} extra) -- "
+                f"assigning tiles would require dropping {rem} cell(s), silently altering this "
+                f"layout's geometry. Fix the layout upstream (gen-layout), or pass --allow-trim "
+                f"to explicitly accept dropping {rem} cell(s) (recorded in output metadata).")
         ex = [c for c in cells if not _covered(c, cells)]
         random.shuffle(ex)
         drop = {id(c) for c in ex[:rem]}
         cells = [c for c in cells if id(c) not in drop]
+        trim_info = {"dropped_cells": rem}
     positions = [(c.x, c.y, c.layer_idx) for c in cells]
     n_layers = len({li for _, _, li in positions})
-    return positions, n_layers
+    return positions, n_layers, trim_info
 
 
 def _build_bb(positions):
@@ -672,11 +686,14 @@ def main():
     ap.add_argument("--variant", choices=("easy", "harder", "hard"), default="easy", help="P3 difficulty tier")
     ap.add_argument("--raw-ids", action="store_true",
                     help="emit raw sequential type ids (i=tid+1) instead of remapping to real Group_1 art ids")
+    ap.add_argument("--allow-trim", action="store_true",
+                    help="if the layout isn't %%3==0, accept dropping cells to partition cleanly "
+                         "(default: hard-fail -- see _load_trimmed docstring). Recorded in output metadata.")
     a = ap.parse_args()
 
     random.seed(a.seed)
     path = _resolve_layout(a.layout)
-    positions, n_layers = _load_trimmed(path)                # deterministic trim (seeded above)
+    positions, n_layers, trim_info = _load_trimmed(path, allow_trim=a.allow_trim)  # deterministic (seeded above)
     bb, bc = _build_bb(positions)
     n = len(positions)
     ctx = {"positions": positions, "bb": bb, "bc": bc, "n": n, "n_layers": n_layers}
@@ -712,7 +729,14 @@ def main():
     info["art_ids"] = "Group_1 (85,142-170)" if arted else "raw (tid+1)"
     if not a.raw_ids and not arted:
         print(f"  NOTE: {len(set(tile_ids))} types > {len(VALID_GROUP1_IDS)} Group_1 art ids -> raw ids", flush=True)
-    meta = {"source": f"gen_pattern_{info['pattern']}", **info, "layout": os.path.basename(path)}
+    layout_name = os.path.basename(path)
+    if trim_info is not None:
+        # geometry differs from the named layout -- never claim the pristine name (Task 1: no silent
+        # Layout_A -> Layout_A1). Suffix makes the drift visible in every downstream consumer.
+        layout_name = f"{layout_name}+trim{trim_info['dropped_cells']}"
+    meta = {"source": f"gen_pattern_{info['pattern']}", **info, "layout": layout_name}
+    if trim_info is not None:
+        meta["geometry_trimmed"] = {"from_layout": os.path.basename(path), **trim_info}
     data = _to_game_json(positions, tile_ids, meta, id_map)
     out = a.out or os.path.join(os.getcwd(),
                                 f"Level_P{a.pattern}_{os.path.basename(path).replace('NewLayout_', '').replace('.json', '')}.json")

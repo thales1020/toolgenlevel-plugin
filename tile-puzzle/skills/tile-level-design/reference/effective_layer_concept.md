@@ -24,7 +24,7 @@ originSessionId: 5bf952b0-04ed-42f3-9813-354182a6e8fb
 | **layout score** | physical `layer_idx` (full board, unchanged) |
 | **2-layer window strip** | **effective_layer** (`max_eff - min_eff <= 2`) |
 | **same-type subtract** in effective scores | **physical layer** (intentional, see below) |
-| **cover100** | **effective_layer** (cells at `max(eff_layers)`) |
+| **cover100** | **area-based** (`cover100_by_area`, ≥90% surface covered — NOT effective_layer) |
 | **inter_group / intra_group** | uses effective scores (which use physical for subtract) |
 
 ## Why same-type subtract uses PHYSICAL layer (not effective)
@@ -40,15 +40,17 @@ So keep `-1` (any same-type above):
 - This is correct: hidden cascade stacks ARE harder for player than visible triples
 - **Cascade Strategy** exploits this: place easy types vertical → strip doesn't reduce score, but player still feels "easy" via reveal cascade
 
-## Why cover100 uses effective_layer (not geometric 4-corner)
+## cover100 is AREA-based, not effective_layer-based (current, shipped)
 
 **Old**: cover100 = #cells with `coverage == 4` (geometric 4-corner check).
 
-**New**: cover100 = #cells where `effective_layer == max(effective_layers in active)` AND max > 1.
+**Current**: cover100 is computed by `cover100_by_area(board, active, threshold=0.9)` in `engine/tile_level_simulator.py` (`compute_full_score`, ~line 1652) — an AREA-based check: a cell counts once ≥90% of its surface (`VISUAL_TILE_SIZE=1.0`) is covered by higher active tiles. This is NOT an effective_layer check.
 
-Reasons:
+Note: an effective_layer-based `cover100_count(board, active)` function also exists (~line 1594), but it is NOT wired into `compute_full_score` / scoring — do not describe it as the formula in use.
+
+Reasons the area-based approach replaced the geometric 4-corner check:
 - Geometric 4-corner depends on tile shape (1×1 squares with half-grid offsets) → fragile to layout design
-- effective_layer directly measures "how buried" → more semantic
+- Area-based coverage directly measures "how buried" → more semantic
 - Active-set based: cover100 reduces as tiles cleared (same as inter/intra)
 
 **Hệ quả**:
@@ -74,7 +76,8 @@ Only 2 tiles have effective ≤ 0 → strip can't form triple → stack stays. *
   - `strip_easy_triples` — recomputes eff_layers each iteration
   - `compute_full_score` — eff_layers-based cover100, no more `eff_cover` field
 
-- `difficulty_minmax_combined.csv` — re-swept with new scoring (21 minutes, 2636 rows)
+- `difficulty_minmax_combined.csv` — re-swept with new scoring (21 minutes; row count at the time of
+  this re-sweep is superseded — see `SKILL.md §8` for the current/latest row count)
 
 ## Bug history
 

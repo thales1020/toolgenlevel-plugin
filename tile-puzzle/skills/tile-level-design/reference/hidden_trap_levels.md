@@ -25,3 +25,5 @@ originSessionId: 5bf952b0-04ed-42f3-9813-354182a6e8fb
 **Why:** User said these levels are "rất thú vị" (very interesting) because the trap feels fair — the player can see why they lost (wrong early pick) and is motivated to retry with different strategy or burn a booster.
 
 **How to apply:** When the user asks for a "challenging but solvable" or "need booster to pass" level, default to this metric: v3 solvable + greedy fail rate ≥ 0.90. Don't bother with count_wins absolute count (it hits 10^6+ always and can't discriminate). Random/greedy fail rate is the right lens.
+
+See `reference/greedy_vs_exact.md` for how this relates to (and must not be confused with) `min_safe_choices`, the solver's internal atomic-triple collapse, and the deprecated `TileSolver.analyze`. `analyze_level.py --solve-profile` (`SKILL.md §3.4`) persists exactly this `(dfs_solvable, greedy_fail_rate, classification)` combination for any level on demand, not just at generation time.

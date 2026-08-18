@@ -8,9 +8,18 @@ Always solve and verify the EXACT board data before calling play_level. Never re
 
 **Why:** In a session, 8 workers wrote to the same candidate file. The board loaded into play_level was from an early write, but a later worker overwrote the file with a different (unsolvable) board. The solver then solved the wrong board, producing a solution that didn't match what the user saw on screen.
 
-**How to apply:**
+**FIXED at the root (see `docs/CLAUDE.md` §6):** the `find_*.py` templates used to write to a shared/
+hardcoded filename (e.g. `trap_L20_candidate.json`, or worse, a fully hardcoded literal like
+`trap_70_90_candidate.json` shared across every layout AND seed) — exactly the collision this doc
+describes. Every template now writes `*_s{seed}.json` (unique per worker), and the documented 8-worker
+orchestration waits for all workers to finish, then reads back and independently re-verifies each
+file before picking a winner, rather than trusting "first success" against a filename other workers
+could still be writing to. This closes the race described above rather than just working around it.
+
+**How to apply (still applies — belt and suspenders):**
 1. Generate/find candidate → v3 verify → solve_path double-verify
 2. Save the verified board to a SEPARATE file (not the candidate file workers write to)
 3. Pass that exact saved board dict to play_level
 4. For step-by-step solutions, solve the same board dict that was played — never re-read from a shared file
-5. When using 8 workers, either: (a) each worker writes to a unique file, or (b) use single-process search for critical tasks
+5. When using 8 workers: each worker writes to a UNIQUE file (`*_s{seed}.json`) — this is now the
+   required convention, not an either/or option.

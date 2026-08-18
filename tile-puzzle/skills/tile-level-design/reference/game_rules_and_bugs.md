@@ -14,6 +14,12 @@ originSessionId: 5bf952b0-04ed-42f3-9813-354182a6e8fb
 
 **v3 solvers do NOT model buffs.** `verify_smart_v3`, `solve_path`, and `count_solutions` all solve the level with tray=7 hard ceiling and no Shuffle/Undo/+1Slot. A level flagged "unsolvable" by v3 may still be beatable in-game via buffs — treat "v3 unsolvable" and "unwinnable" as different bars.
 
+**Geometry must never drift silently during tile assignment.** `gen_pattern.py::_load_trimmed` and
+`reserve_special.py::_gen_normal_level` used to silently drop up to 2 cells when a layout wasn't ÷3,
+still claiming the original layout's name — a "Layout_A silently becomes Layout_A1" bug. Both now
+hard-fail by default (opt in with `--allow-trim`, which records the trim and renames the output).
+See `SKILL.md §22b`.
+
 **Why:** These are all one-slot-off / one-rule-off bugs that look correct until you actually replay the solution in the game UI. Each one wasted multiple iterations to track down.
 
 **How to apply:** Any new solver or replay script I write MUST use `>= TRAY_SIZE AND no triple` as the game-over check, and any atomic/batch action must validate intermediate tray sizes. Any user-facing pick-sequence output must add +1 to tile_id for display labels. When the user asks about solvability, clarify whether they mean "v3 unsolvable (no buffs)" or "unwinnable even with buffs".

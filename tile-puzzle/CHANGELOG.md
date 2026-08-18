@@ -1,5 +1,90 @@
 # Changelog — tile-puzzle
 
+## 0.9.0 — skill boundary hardening, generation-pipeline race fix, greedy-vs-exact conclusion
+
+Four fixes reported from real usage, each investigated with direct source evidence (not speculation)
+before being fixed. Behavior-changing — not a pure perf release.
+
+**Plus a documentation-hygiene pass** enforcing the project's "sửa = xoá câu sai, không viết đè" rule
+(a correction must delete/replace the wrong sentence, never leave it standing next to the new one —
+an old-but-"close enough" sentence otherwise gets propagated into future decisions via
+experience-following). Two independent audits (SKILL.md ×4 + `docs/`, and `reference/*.md`) found 21
+instances of stale facts left in place after a correction elsewhere, since fixed: a stale `cover100`
+formula description (2 files) contradicting the shipped area-based engine code; `display-json-level`
+describing Cloud's reveal behavior under the Mystery bullet (and missing the `o` field entirely); wrong/
+superseded script names (`find_hybrid_fast.py` where `find_hybrid_priority_v2.py` is correct; `find_*.py`
+template routing surviving in 4 places after `gen_pattern.py` superseded them); a wrong deprecated
+`final_score` formula (missing a whole component, wrong weight) presented with no deprecation note in
+`docs/CLAUDE.md` and `docs/LEVEL_DESIGN_GUIDE.md`; disagreeing row-counts/layout-counts/canonical-script-
+names between `docs/CLAUDE.md` and `SKILL.md` (ground truth); `SKILL.md §18`'s own index missing a row
+for `greedy_vs_exact.md`; an `INDEX.md` claim ("now 6 patterns") the target file doesn't back up; a
+wrong section citation in `greedy_vs_exact.md` itself. `docs/LEVEL_DESIGN_GUIDE.md` (a 364-line guide
+built around a THIRD pattern-numbering scheme, T1-T5) was found out-of-scope of both audits and is now
+flagged historical/unverified pending its own pass, rather than left silently authoritative-looking.
+Three items were deliberately left unfixed as genuine product judgment calls, not auto-resolved:
+`bridge_distribution.md`'s 3- vs 4-group model, `guided_trap.md`'s fail-rate criterion vs SKILL.md §4's
+definition, and `level_design_patterns.md`'s pattern-numbering scheme (renumber vs. names-only).
+
+**A second, adversarial re-audit (run actual code, not just read it) then caught what the first pass
+missed:** two more `find_*.py` templates (`find_hybrid_priority_v2.py`, `find_hybrid_cascade_L21.py`)
+still wrote a hardcoded, non-seed-unique filename — the exact write-race the fix was supposed to
+eliminate everywhere, missed because they don't match the `*_candidate.json` pattern the original sweep
+grepped for. Now fixed (`*_verified_s{seed}.json`), bringing all 15 `find_*.py` templates to the safe
+convention (verified by direct grep of every `open(...json...)` write site, not just the ones named in
+the original fix). `reference/difficulty_design_workflow.md` still taught the old racy "kill other
+workers" flow as the approved workflow — corrected to match `docs/CLAUDE.md §6`. Also fixed:
+`reserve_special.py::_gen_normal_level` was missing the `board is None` guard its sibling
+`gen_pattern.py::_load_trimmed` has (a relative path crashed with a raw traceback instead of a clean
+error); `SKILL.md §22b` overstated that `reserve_special.py` renames an output `layout` field (it has
+no such field — only `gen_pattern.py` does); `analyze_level.assert_geometry_unchanged`'s error message
+pointed to a doc heading string that didn't exist. Three citation line-numbers in `greedy_vs_exact.md`
+had already drifted from a subsequent edit — replaced with function/section names so they can't drift
+again. Verified via 3 independent adversarial audit agents that actually ran the code (not just read
+it) — Task 3 and Task 4 reproduced clean (SOLID); Task 1 and Task 2 each had real gaps, now closed.
+Full regression suite re-run clean after all fixes: 55-board solver oracle bit-identical,
+`test_special_solver.py` 14/14, gen-layout `test_full.py` 14/14, `claude plugin validate` passing.
+
+- **Geometry can no longer drift silently during tile assignment (breaking default change).**
+  `gen_pattern.py`/`reserve_special.py` used to silently drop up to 2 cells when a layout wasn't ÷3,
+  still exporting under the ORIGINAL layout's name — a real "Layout_A silently becomes Layout_A1" bug,
+  inconsistent with `find_hybrid_fast.py`'s existing hard-fail behavior for the identical precondition.
+  Both now **hard-fail by default**; pass `--allow-trim` to explicitly opt in, which records
+  `metadata.geometry_trimmed` and renames the output layout (`L20+trim1`, never bare `L20`). New
+  reusable guard: `analyze_level.assert_geometry_unchanged(before, after, context)`. New governance
+  text in both `gen-layout/SKILL.md` and `tile-level-design/SKILL.md` (§22b): don't blend
+  geometry-editing and tile-assignment into one operation, and a loaded layout's cell set is frozen
+  for that operation unless a step (stacks, specials) is explicit and documented.
+- **Fixed a real parallel-worker write race (not a solver bug).** `docs/CLAUDE.md` §6 mandated 8
+  workers write to a SHARED `*_candidate.json` filename ("first success wins, kill the rest") —
+  directly contradicting its own §247 "unique output files per worker" rule. `find_trap_fast.py`,
+  `find_trap_70_90.py` (worst — a filename hardcoded across ALL layouts and seeds), and 8 other
+  `find_*.py` templates now write `*_s{seed}.json`. §6 rewritten: workers write unique files, the
+  orchestrator waits for all of them and independently re-verifies each file before picking a winner
+  — eliminates the race at the root rather than mitigating it. (Solver transposition tables were
+  investigated and confirmed 100% call-local — cross-board memo leakage was ruled out as a cause.)
+- **`solve_v3` now rejects malformed boards immediately instead of silently misreporting.** A NORMAL
+  board (no specials) with `total_cells % 3 != 0` can never fully clear — this is always a caller bug,
+  never a real "maybe unsolvable" case. `solve_v3` now raises `ValueError` before spending any DFS
+  time (both engine copies — `gen-layout/engine/` and `tile-level-design/engine/`, kept byte-parity).
+  Verified bit-identical on the 55-board oracle (the guard never fires on any well-formed board).
+- **New `scripts/solve_dispatch.solve_any(board, ...)`** — inspects a board for bonus/mission stones
+  (`i>=1000`) and calls the right solver (`solve_v3` vs `solve_special.solve_v3_special`) automatically.
+  Additive — existing direct call sites are unchanged. Recommended default for new code that isn't
+  already certain of its board type.
+- **New `reference/greedy_vs_exact.md`** consolidates the 4 mechanisms that touch "greedy vs exact"
+  (the stochastic `playout()` evaluator, the exact per-step `min_safe_choices` probe, the solver-internal
+  atomic-triple collapse, and the deprecated `TileSolver.analyze`) into one decision table — what each
+  is for and what it must NOT be used for (citing the documented empirical failure of greedy-fail-rate
+  as a *general* difficulty metric, valid only for its narrow "trap ẩn" purpose).
+- **New `analyze_level.py --solve-profile`** persists the first real joint conclusion combining both
+  solving methods: `metadata.solve_profile = {"dfs_solvable", "greedy_fail_rate", "classification"}`,
+  classification ∈ `hidden_trap`/`partial_trap`/`straightforward`/`unsolvable`/`None` (reuses the
+  existing 0.90/0.20 thresholds from `hidden_trap_levels.md`, no new thresholds invented). **Off by
+  default** (300-playout cost not paid on the common path). Explicitly NOT a difficulty ranking metric
+  — same scoping discipline as `min_safe_choices`, never replaces `new_diffScore`. Verified against the
+  documented `trap_an_L20_s82.json` reference case (reproduces `classification=hidden_trap`,
+  `greedy_fail_rate≈1.0`) and unit-tested at all classification-boundary values.
+
 ## 0.8.2 — `parallel_sweep` helper: parallelize a seed/candidate sweep, keep serial semantics
 
 - **New `skills/tile-level-design/scripts/parallel_sweep.py`.** `first_match(worker, items, predicate, …)`

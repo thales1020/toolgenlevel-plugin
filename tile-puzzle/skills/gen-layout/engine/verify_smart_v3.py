@@ -40,6 +40,17 @@ def solve_v3(board, max_expansions=None, verbose=False):
     cells = board.all_cells()
     n = len(cells)
     tile_ids = [c.tile_id for c in cells]
+    # A NORMAL board (no bonus 1001 / mission 1002) can only ever fully clear in units of 3 -- every
+    # win removes exactly 3 same-type tiles. n % 3 != 0 here is ALWAYS a caller bug (wrong/mistrimmed
+    # board passed in), never a legitimate "maybe unsolvable" case worth spending DFS time on. Fail
+    # loud and immediate instead of returning a meaningless False after real search cost.
+    if n % 3 != 0 and not any(t >= 1000 for t in tile_ids):
+        raise ValueError(
+            f"solve_v3: board has {n} cells, not divisible by 3, and no special tiles (i>=1000) -- "
+            f"this board can never be fully cleared by any solver, so this is a caller bug (a "
+            f"mistrimmed or malformed board), not a real solvability question. If this board "
+            f"legitimately carries bonus/mission tiles, use solve_special.solve_v3_special (or "
+            f"solve_any) instead of solve_v3.")
     blocked_by, blocks = build_bitmask_visibility(cells)
     n_types = max(tile_ids) + 1
 

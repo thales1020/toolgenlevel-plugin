@@ -216,9 +216,10 @@ def main():
                 "v3_solvable": True,
             },
         }
-        with open("easyfirst_candidate.json", "w") as f:
+        _seed = sys.argv[1] if len(sys.argv) > 1 else 1
+        with open(f"easyfirst_s{_seed}.json", "w") as f:
             json.dump(out, f, indent=2)
-        print("\nSaved to easyfirst_candidate.json")
+        print(f"\nSaved to easyfirst_s{_seed}.json")
         return
 
     print(f"\nNO level in {MAX_ATTEMPTS}. Best: {best}")

@@ -1,4 +1,7 @@
-"""Export trap_L20_candidate.json to game-compatible stones format with metadata."""
+"""Export a trap_*_s{seed}.json candidate (find_trap_fast.py output) to game-compatible stones format
+with metadata. Filename convention updated (Task 2a): find_trap_fast.py used to write a shared
+trap_{layout}_candidate.json across all parallel seed-workers (a write race); it now writes
+trap_{layout}_s{seed}.json per worker -- pass the exact file that worker produced."""
 import json, sys, os
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -13,8 +16,8 @@ from tile_level_simulator import Board, Layer, Cell, DifficultyScorer, load_scor
 from verify_smart_v3 import solve_v3
 from solve_path import solve_with_path
 
-# Candidate path + output dir as args (defaults are illustrative)
-CAND = sys.argv[1] if len(sys.argv) > 1 else 'trap_L20_candidate.json'
+# Candidate path + output dir as args (default illustrates the new per-seed convention -- pass yours)
+CAND = sys.argv[1] if len(sys.argv) > 1 else 'trap_L20_s1.json'
 OUT = sys.argv[2] if len(sys.argv) > 2 else os.path.abspath(os.path.join('levels', 'trap_an_L20_s1.json'))
 
 with open(CAND) as f:

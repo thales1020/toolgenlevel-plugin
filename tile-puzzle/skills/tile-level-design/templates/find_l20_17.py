@@ -103,7 +103,7 @@ for attempt in range(20000):
             'n_types': n_types,
             'fail_rate': fail_rate,
         }
-        with open('l20_cc17_candidate.json', 'w') as f:
+        with open(f'l20_cc17_s{sys.argv[1] if len(sys.argv) > 1 else 1}.json', 'w') as f:
             json.dump(out, f)
         print(f'\nSAVED: score={final} fail={fail_rate*100}%')
         sys.exit(0)

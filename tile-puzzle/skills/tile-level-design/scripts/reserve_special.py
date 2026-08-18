@@ -78,20 +78,36 @@ def _ov(ax, ay, ha, bx, by, hb, circular):
     return abs(dx) < thr and abs(dy) < thr
 
 
-def _gen_normal_level(layout, cc, distance, seed):
-    """Full NORMAL match-3 level on `layout`, trimmed to ÷3, v3-solvable. Board or None."""
+def _gen_normal_level(layout, cc, distance, seed, allow_trim=False):
+    """Full NORMAL match-3 level on `layout`, trimmed to ÷3, v3-solvable. Board or None.
+
+    If total_cells isn't ÷3, dropping cells to partition cleanly silently turns the named layout into
+    a different one (Layout_A -> Layout_A1). Default: hard-fail (matches gen_pattern.py's
+    _load_trimmed and find_hybrid_fast.py's existing behavior for the same precondition). Pass
+    allow_trim=True (CLI: --allow-trim) to accept it; the trim is recorded on the returned board as
+    `board._trim_info` for the caller to surface in output metadata, never silent."""
     random.seed(seed)
     board = load_board_from_file(layout)
+    if board is None:
+        raise SystemExit(f"could not load board from {layout} (absolute path required on Windows)")
     board.clear_tiles()
     cells = board.all_cells()
     rem = len(cells) % 3
-    if rem:                                   # trim ÷3 by dropping fully-exposed cells
+    board._trim_info = None
+    if rem:                                   # would need to trim ÷3 by dropping fully-exposed cells
+        if not allow_trim:
+            raise SystemExit(
+                f"layout {layout} has {len(cells)} cells, not divisible by 3 ({rem} extra) -- "
+                f"assigning normal tiles would require dropping {rem} cell(s), silently altering this "
+                f"layout's geometry. Fix the layout upstream (gen-layout), or pass --allow-trim to "
+                f"explicitly accept dropping {rem} cell(s) (recorded in output metadata).")
         ex = [c for c in cells if not _covered(c, cells)]
         random.shuffle(ex)
         drop = set(id(c) for c in ex[:rem])
         for ly in board.layers:
             ly.cells = [c for c in ly.cells if id(c) not in drop]
         cells = board.all_cells()
+        board._trim_info = {"dropped_cells": rem}
     eng = TEEngine(); eng.validate = False
     eng.color_count = cc; eng.hard_code = 0; eng.distance = distance
     eff = eng._get_effective_cc()
@@ -254,6 +270,9 @@ def main():
     ap.add_argument("--smin", type=float, default=None, help="optional min normal-board final_score")
     ap.add_argument("--smax", type=float, default=None, help="optional max normal-board final_score")
     ap.add_argument("--out", default="")
+    ap.add_argument("--allow-trim", action="store_true",
+                    help="if the layout isn't %%3==0, accept dropping cells to partition cleanly "
+                         "(default: hard-fail -- see _gen_normal_level docstring). Recorded in output metadata.")
     a = ap.parse_args()
 
     # `want` = one (sid, footprint-half) per special to place. Supports MIXING 2×2 and 3×3.
@@ -283,7 +302,7 @@ def main():
 
     best_placed = 0
     for seed in range(1, a.seeds + 1):
-        nb = _gen_normal_level(a.layout, a.color_count, a.distance, seed)
+        nb = _gen_normal_level(a.layout, a.color_count, a.distance, seed, allow_trim=a.allow_trim)
         if nb is None:
             continue
         # optional score band on the NORMAL board
@@ -353,15 +372,20 @@ def main():
         layers = [{"index": L, "stones": by[L]} for L in sorted(by)]
         names = {1001: "bonus", 1002: "mission"}
         kind = "_".join(names.get(s, str(s)) for s in sorted(reserve_spec))
+        meta = {"source": f"reserve_{kind}",
+                "special_counts": {str(s): reserve_spec[s] for s in sorted(reserve_spec)},
+                "special_layers": {str(L): c for L, c in sorted(layer_count.items())},
+                "normal_tiles": n_normal, "normal_score": round(fs, 2),
+                "solvable_v3_special": True, "specials_covered_at_start": True,
+                "rules_ok": "bbox+stack-free+distinct-xy+overlap-separated+even-layer",
+                "placement": f"interstitial covers (direction C); bonus={a.bonus_cover or 'auto-mix'} mission={a.mission_cover or 'auto-mix'}"}
+        trim_info = getattr(nb, "_trim_info", None)
+        if trim_info is not None:
+            # normal-board geometry differs from the input layout -- never silent (Task 1).
+            meta["geometry_trimmed"] = {"from_layout": os.path.basename(a.layout), **trim_info}
         data = {"group": 1, "tiles": "", "layers": layers,
                 "stacks": nb._stacks if hasattr(nb, "_stacks") else [],
-                "metadata": {"source": f"reserve_{kind}",
-                             "special_counts": {str(s): reserve_spec[s] for s in sorted(reserve_spec)},
-                             "special_layers": {str(L): c for L, c in sorted(layer_count.items())},
-                             "normal_tiles": n_normal, "normal_score": round(fs, 2),
-                             "solvable_v3_special": True, "specials_covered_at_start": True,
-                             "rules_ok": "bbox+stack-free+distinct-xy+overlap-separated+even-layer",
-                             "placement": f"interstitial covers (direction C); bonus={a.bonus_cover or 'auto-mix'} mission={a.mission_cover or 'auto-mix'}"}}
+                "metadata": meta}
         out = a.out or a.layout.replace(".json", f"_{kind}.json").replace("NewLayout_", f"Level_{kind}_")
         json.dump(data, open(out, "w", encoding="utf-8"), separators=(",", ":"), ensure_ascii=False)
         print(f"-> {out}")

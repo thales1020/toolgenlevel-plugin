@@ -210,9 +210,10 @@ def main():
                 "result": "unsolvable",
             }
         }
-        with open("unsolvable_candidate.json", "w") as f:
+        _seed = sys.argv[1] if len(sys.argv) > 1 else 1
+        with open(f"unsolvable_s{_seed}.json", "w") as f:
             json.dump(out, f, indent=2)
-        print("\nSaved to unsolvable_candidate.json")
+        print(f"\nSaved to unsolvable_s{_seed}.json")
         return
 
     print(f"\n{'='*60}")

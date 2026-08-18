@@ -275,7 +275,8 @@ for attempt in range(200000):
         'avg_cleared_pct': pct,
         'instant_triples': instant,
     }
-    with open('cascade_L21_verified.json', 'w') as f:
+    _seed = sys.argv[1] if len(sys.argv) > 1 else 42
+    with open(f'cascade_L21_verified_s{_seed}.json', 'w') as f:
         json.dump(out, f, indent=2)
-    print(f'Saved to cascade_L21_verified.json')
+    print(f'Saved to cascade_L21_verified_s{_seed}.json')
     break

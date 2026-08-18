@@ -117,7 +117,7 @@ for attempt in range(30000):
                 **knob,
             },
         }
-        with open('trap_70_90_candidate.json', 'w') as f:
+        with open(f'trap_70_90_s{int(sys.argv[1]) if len(sys.argv) > 1 else 1}.json', 'w') as f:
             json.dump(out, f, indent=2)
         print(f'\nSAVED: score={final:.2f} types={n_types} fail={fail_rate*100:.0f}% v3_exp={exp}')
         sys.exit(0)

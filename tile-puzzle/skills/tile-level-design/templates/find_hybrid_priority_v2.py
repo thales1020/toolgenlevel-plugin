@@ -175,7 +175,8 @@ for attempt in range(200000):
         'instant_triples': instant,
         'tier1_distribution': pt,
     }
-    with open('hybrid_priority_verified.json', 'w') as f:
+    _seed = sys.argv[1] if len(sys.argv) > 1 else 42
+    with open(f'hybrid_priority_verified_s{_seed}.json', 'w') as f:
         json.dump(out, f, indent=2)
-    print(f'Saved to hybrid_priority_verified.json')
+    print(f'Saved to hybrid_priority_verified_s{_seed}.json')
     break

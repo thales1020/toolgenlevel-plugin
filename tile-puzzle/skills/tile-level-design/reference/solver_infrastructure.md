@@ -22,4 +22,4 @@ originSessionId: 5bf952b0-04ed-42f3-9813-354182a6e8fb
 
 **`find_unsolvable.py`** — find levels where beam search proves no winning path. Works but slow; mostly superseded by v3's dead-state detection.
 
-**How to apply:** Start any new level-design task with `find_easy_top3.py` as the template (it has the cleanest generate→filter→verify loop). Copy and modify the metric to match the new constraint. Use v3 from `verify_smart_v3` for solvability; use `solve_path` if the user will want to see the solution.
+**How to apply:** Start any new level-design task with `scripts/gen_pattern.py --pattern N --layout <id>` (SKILL.md §4) — it replaces the per-layout `find_*` templates, which are kept in `templates/` as provenance only. Use v3 from `verify_smart_v3` for solvability; use `solve_path` if the user will want to see the solution. For a board that may carry bonus/mission specials, dispatch through `scripts/solve_dispatch.solve_any` rather than calling `solve_v3` directly (SKILL.md §2) — plain `solve_v3` raises `ValueError` on special stones.

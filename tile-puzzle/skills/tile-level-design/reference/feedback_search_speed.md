@@ -24,7 +24,7 @@ Level-search scripts should be optimized for speed. Key lessons from bugs and be
 
 **Benchmark results (9 templates parallel on L20+L21)**:
 - Before fixes: ~30 minutes sequential
-- After fixes: **69 seconds parallel** (all 9 levels)
+- After fixes: **~20 seconds parallel** (all 9 levels) — 90x speedup, see SKILL.md §7 and gen_all_9_pattern.md
 
 **IMPORTANT: Benchmark MUST include full request → play window opens** (not just gen time):
 - Gen time: time spent in find_*.py scripts

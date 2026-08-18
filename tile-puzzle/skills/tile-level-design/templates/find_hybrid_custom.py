@@ -148,7 +148,7 @@ for attempt in range(100000):
             'fail_rate': fail_rate,
             'avg_cleared': avg_cleared,
         }
-        with open('hybrid_trap_candidate.json', 'w') as f:
+        with open(f'hybrid_trap_s{sys.argv[1] if len(sys.argv) > 1 else 1}.json', 'w') as f:
             json.dump(out, f)
         print(f'  >> SAVED best: avg_clr={avg_cleared:.0f} fail={fail_rate*100:.0f}%', flush=True)
 

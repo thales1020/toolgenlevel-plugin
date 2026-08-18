@@ -179,7 +179,7 @@ for attempt in range(100000):
             'score': score, 'n_types': n_types, 'instant_triples': instant,
             'fail_rate': fail_rate, 'avg_cleared': avg_clr,
         }
-        with open(f'hybrid_fast_{layout_id}_candidate.json', 'w') as f:
+        with open(f'hybrid_fast_{layout_id}_s{seed}.json', 'w') as f:
             json.dump(out, f)
         if fail_rate >= FAIL_MIN:
             print(f'  >> SAVED (fail {fail_rate*100:.0f}% >= {FAIL_MIN*100:.0f}%): score={score:.1f} types={n_types}', flush=True)

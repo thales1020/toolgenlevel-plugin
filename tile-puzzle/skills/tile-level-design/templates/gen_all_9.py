@@ -3,11 +3,11 @@ import sys, os, random, json, time, subprocess, multiprocessing
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'engine'))
 
 SCRIPTS = [
-    ("python find_l20_17.py 99", "l20_cc17_candidate.json", "P1 Trap An"),
+    ("python find_l20_17.py 99", "l20_cc17_s99.json", "P1 Trap An"),
     ("python find_hybrid_custom_fast.py 99 60 85", "hybrid_fast_s99.json", "P3 Hybrid Random"),
-    ("python find_hybrid_priority_v2.py 99", "hybrid_priority_verified.json", "P4 Hybrid Priority"),
-    ("python find_hybrid_cascade_L21.py 99", "cascade_L21_verified.json", "P5 Cascade L21"),
-    ("python find_trap_70_90.py 99", "trap_70_90_candidate.json", "P6 90pct Fail"),
+    ("python find_hybrid_priority_v2.py 99", "hybrid_priority_verified_s99.json", "P4 Hybrid Priority"),
+    ("python find_hybrid_cascade_L21.py 99", "cascade_L21_verified_s99.json", "P5 Cascade L21"),
+    ("python find_trap_70_90.py 99", "trap_70_90_s99.json", "P6 90pct Fail"),
     ("python find_guided_trap_L21.py 99", "guided_trap_L21_s99.json", "P7 Guided Trap"),
     ("python find_clear50_trap.py 99 NewLayout_L74.json 30 60", "clear50_NewLayout_L74_s99.json", "P9 Clear 50pct"),
 ]
@@ -120,12 +120,12 @@ if __name__ == '__main__':
 
     # Collect results
     all_files = [
-        ("l20_cc17_candidate.json", "P1 Trap An"),
+        ("l20_cc17_s99.json", "P1 Trap An"),
         ("_9_p2.json", "P2 Top Easy"),
         ("hybrid_fast_s99.json", "P3 Hybrid Random"),
-        ("hybrid_priority_verified.json", "P4 Hybrid Priority"),
-        ("cascade_L21_verified.json", "P5 Cascade L21"),
-        ("trap_70_90_candidate.json", "P6 90pct Fail"),
+        ("hybrid_priority_verified_s99.json", "P4 Hybrid Priority"),
+        ("cascade_L21_verified_s99.json", "P5 Cascade L21"),
+        ("trap_70_90_s99.json", "P6 90pct Fail"),
         ("guided_trap_L21_s99.json", "P7 Guided Trap"),
         ("_9_p8.json", "P8 80pct Fail"),
         ("clear50_NewLayout_L74_s99.json", "P9 Clear 50pct"),

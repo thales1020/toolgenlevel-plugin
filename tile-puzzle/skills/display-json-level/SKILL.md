@@ -1,6 +1,6 @@
 ---
 name: display-json-level
-description: "Render a Tile Explorer LEVEL JSON (game format {group,tiles,layers,stacks,bg,bgm,sl,dif} with stones {i,x,y,(s),(m)}) into a self-contained, browser-playable HTML with real art — tilebase plate + Group_1 tile faces, bonus drawn ROUND, mission SQUARE, mystery face-down — faithful to the engine rules. Read-only display/preview; does NOT change the JSON."
+description: "Render a Tile Explorer LEVEL JSON (game format {group,tiles,layers,stacks,bg,bgm,sl,dif} with stones {i,x,y,(s),(m),(o)}) into a self-contained, browser-playable HTML with real art — tilebase plate + Group_1 tile faces, bonus drawn ROUND, mission SQUARE, mystery face-down — faithful to the engine rules. Read-only display/preview; does NOT change the JSON."
 when_to_use: "When the user wants to view / preview / play / 'display' a level JSON in the browser, share a playable single-file HTML, or visually check a generated level. Distinct from gen-layout (makes empty geometry) and tile-level-design (assigns tiles, scores difficulty, solves/verifies) — this skill only RENDERS an existing level file, it does not create or modify levels."
 ---
 
@@ -43,8 +43,12 @@ references it rather than duplicating the ~1 MB of art assets.
   comes from `s`: **mission `0.7` = 2×2, `1.0` = 3×3; bonus `1.0` = 2×2, `1.5` = 3×3**. The special
   RENDERS at exactly that footprint (2 or 3 cells) so **visual = collision**; **bonus draws as a circle,
   mission as a rounded square**; both dim while covered.
-- **Mystery (`m:true`):** a normal match-3 tile shown FACE-DOWN (mystery cover art) until it becomes
-  pickable, then it reveals its Group_1 face. Plays as a normal tile.
+- **Mystery (`o:[0]`, legacy `m:true`):** stays COVERED even when pickable — the player picks BLIND, and
+  the real Group_1 face is revealed only once it lands in the TRAY. Plays as a normal match-3 tile
+  (÷3 unchanged).
+- **Cloud (`o:[1]`):** covered by mystery-cover art, clears MISSION-STYLE — the cover clears the instant
+  nothing on a higher layer overlaps it (i.e. when it becomes pickable), revealing the real face ON THE
+  BOARD. Distinct from Mystery, which reveals only in the tray.
 - **Art:** one random tilebase plate for the whole level + a Group_1 face per distinct tile type
   (display-only mapping — the `i` values in the JSON are untouched; a raw id that matches a Group_1
   filename uses that exact sprite). Only the images actually used are embedded as base64, so the file

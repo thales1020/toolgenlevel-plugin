@@ -224,7 +224,7 @@ for attempt in range(100000):
             'score': score, 'n_types': n_types, 'variant': variant,
             'instant_triples': instant, 'fail_rate': fail_rate, 'avg_cleared': avg_clr,
         }
-        with open(f'bridge_{variant}_{layout_id}_candidate.json', 'w') as f:
+        with open(f'bridge_{variant}_{layout_id}_s{seed}.json', 'w') as f:
             json.dump(out, f)
         print(f'  >> SAVED: score={score:.1f} instant={instant} fail={fail_rate*100:.0f}%', flush=True)
         # Bridge is about familiarity, not max-fail — first solvable+instant hit is good enough

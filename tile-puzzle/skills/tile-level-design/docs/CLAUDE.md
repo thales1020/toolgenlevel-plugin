@@ -12,19 +12,28 @@ These are explicit invariants the user has asked to be preserved across sessions
 
 3. **"Layer dễ" (easy layer) definition**: a layer is considered easy if, during a match sequence that clears it, the tray never reaches `>= 6` tiles at any step. That is, `max_tray_size_during_clear <= 5`. This is stricter than the game-over ceiling (7) — easy means the player has comfortable headroom. Metrics for "top N layers easy" must verify this ≤5 ceiling on the actual pick sequence (v3 replay), not just on static tile distribution.
 
-4. **Layout difficulty sweep MUST iterate the user-specified tile_count range and report min/max per tile_count.** The canonical script is `difficulty_minmax.py`. For each `(layout, tile_count)` pair, run N samples (default 20) with varied knob presets, track `final_score` min/max. Output CSV with columns `layout, tile_count, score_min, score_max`.
+4. **Layout difficulty sweep MUST iterate the user-specified tile_count range and report min/max per tile_count.** The canonical script is `difficulty_minmax_solvable_parallel.py`. For each `(layout, tile_count)` pair, run N samples (default 20) with varied knob presets, track `final_score` min/max. Output CSV with columns `layout, tile_count, score_min, score_max`.
 
 5. **If requested tile_count exceeds layout capacity, SKIP and REPORT, do not silently fall through.** Layout capacity = `total_cells // 3` (each tile type needs at least 3 copies to form any triple). When generating or sweeping with `tile_count > capacity`:
    - The gen engine will effectively cap at `capacity`, producing fewer distinct types than requested — do not record this as if it was the requested count.
    - Either: (a) skip the combo entirely and log `"layout X capped at Y types, skipping tile_count Z"`, or (b) record only the actual effective tile count and label the row accordingly. Never emit a row claiming `tile_count=25` on a 30-cell layout.
 
-6. **Parallel search MUST use 8 workers.** Launch with the fixed seed set `1 11 23 47 101 239 991 1001` (chosen to spread RNG without collisions) via shell fork:
+6. **Parallel search MUST use 8 workers, each writing a UNIQUE file, and the orchestrator MUST read
+   back + independently verify before picking a winner.** Launch with the fixed seed set
+   `1 11 23 47 101 239 991 1001` (chosen to spread RNG without collisions) via shell fork:
    ```bash
    for seed in 1 11 23 47 101 239 991 1001; do
      python find_*.py $seed > log_$seed.log 2>&1 &
    done
    ```
-   First successful worker saves its candidate to `*_candidate.json`; kill the rest via `wmic process where "CommandLine like '%%find_*%%'" delete`. Do not run single-worker search for anything that needs score filtering — it's too slow on cache-miss random seeds.
+   Every worker writes its candidate to its OWN file — `*_s{seed}.json` (never a shared/hardcoded
+   name like `*_candidate.json`: two workers racing to write the SAME filename is a real bug that
+   shipped an unverified board once, see `reference/feedback_verify_before_play.md`). Wait for all 8
+   to finish (or a timeout), THEN read back and independently re-verify solvability on EACH file that
+   exists before picking a winner — do not trust a worker's own "I found one" as sufficient, since the
+   file on disk is the only thing that matters. This is slightly slower than "first success wins, kill
+   the rest" (you wait for stragglers), but eliminates the write-race at the root. Do not run
+   single-worker search for anything that needs score filtering — it's too slow on cache-miss random seeds.
 
 ### Additional invariants (from bug experience)
 
@@ -103,9 +112,12 @@ Generation pipeline order: `_build_icon_pool` → `_assign_hard_bg` → `_bind_r
 
 ### Scoring: `DifficultyScorer`
 
-`final_score = layout×X + inter_group×Y + intra_group×Z + cover100×K`
+**`final_score` is DEPRECATED for ranking** — it's a visual-chaos score, not player-difficulty. Use
+`new_diffScore` instead (tile-level-design/SKILL.md §3.0).
 
-Weights tuned to **X=0.3, Y=0.3, Z=0.5, K=0.6** (in `scoring_weights.json`).
+`final_score = layout×0.3 + inter_group×0.3 + intra_group×1.0 + cover100×0.6 + pick_div×0.5`
+
+Weights: **X=0.3, Y=0.3, Z=1.0, K=0.6, D=0.5** (in `scoring_weights.json`).
 
 **effective_layer concept** (NEW): `eff_layer = #higher_physical_layers_with_overlap + 1`. Top tiles = 1, deeply buried = N+1.
 
@@ -117,7 +129,7 @@ Weights tuned to **X=0.3, Y=0.3, Z=0.5, K=0.6** (in `scoring_weights.json`).
 | **cover100** | Active after strip, **effective_layer** | Cells at `max(eff_layers)` and max > 1 |
 | **inter_group / intra_group** | Active after strip, effective scores | Stripped tiles count as effective=0 |
 
-**Re-sweep needed if scoring changes** — `difficulty_minmax_combined.csv` was re-swept (21 min, 2636 rows). Score range expanded for deep layouts (max ~120 → ~200).
+**Re-sweep needed if scoring changes** — `difficulty_minmax_combined.csv` was re-swept; see SKILL.md §8 for the current/latest row count. Score range expanded for deep layouts (max ~120 → ~200).
 
 `score_level` returns a single-pass score; `batch_score` / `auto_generate` with `final_min_max` target gives Min/Max across N runs (reflects true difficulty range since tile assignment is random).
 
@@ -156,7 +168,7 @@ Bulk tools: `bulk_score_levels`, `difficulty_curve`, `generate_level_batch`, `ge
 
 ## Sample levels
 
-`sample_levels/` contains 116 layouts (named `NewLayout_L1.json` … `NewLayout_L116.json` plus `NewLayout_70.json`, `NewLayout_113.json`). These are **empty layouts** (no tiles); tiles must be generated before scoring or playing.
+`sample_layouts/` ships 120 layouts (`NewLayout_L3.json` … `NewLayout_L120.json` plus Clover/SKY/Smiley shape layouts). These are **empty layouts** (no tiles); tiles must be generated before scoring or playing.
 
 ## Difficulty presets
 
@@ -221,7 +233,7 @@ When TEEngine can't produce extreme distributions (e.g., "top 3 layers pure easy
 - **Critical rules**: never place easy triples on cover100 cells (invisible); bridge must form matchable triples at bottom; top layers must have ≥2 instant triples.
 - **Math**: `n_easy × 3 + n_bridge × 6 + n_trap × 3 = total_cells`
 
-### 9 template scripts for level design
+### 9 template scripts for level design (historical/provenance-only — superseded by `gen_pattern.py --pattern N`, see tile-level-design/SKILL.md §4)
 
 | Script | Pattern | Any layout |
 |---|---|---|
@@ -244,7 +256,7 @@ When TEEngine can't produce extreme distributions (e.g., "top 3 layers pure easy
 2. Precompute bb[] once (layout-only)
 3. Clone in-memory (not `load_board_from_file` per iteration)
 4. 2-stage greedy: 30-50 quick → 300 only if pass
-5. Unique output files per worker: `*_s{seed}.json`
+5. Unique output files per worker: `*_s{seed}.json` (this is the SAME rule as Hard requirement §6 above — see it for the full read-back-and-verify orchestration, not just the filename convention)
 6. Double-verify before play: v3 → solve_path → save unique JSON → play saved
 
 ### Reference CSV files

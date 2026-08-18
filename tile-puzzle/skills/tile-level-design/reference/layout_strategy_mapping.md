@@ -41,7 +41,7 @@ When user requests a level, combine the **design pattern** (what kind of level) 
 2. Check `layout_strategy_analysis.csv` → get `recommended_strategy`
 3. If pattern needs "easy top" (patterns 2, 3, 5):
    - Cascade → use `find_hybrid_cascade_L21.py` template
-   - Priority → use `find_hybrid_fast.py` with cover100-aware placement
+   - Priority → use `find_hybrid_priority_v2.py` with cover100-aware placement
    - Random → use `find_hybrid_fast.py` with standard random pool
 4. If pattern is pure trap (patterns 1, 4):
    - Use `find_trap_fast.py` regardless of strategy

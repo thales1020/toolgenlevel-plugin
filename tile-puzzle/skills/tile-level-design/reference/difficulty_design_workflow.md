@@ -9,7 +9,10 @@ User's typical ask: "tạo level score A-B với N types, top K layer phải d�
 **Workflow**:
 1. Write a dedicated `find_*.py` script per constraint style. 8 parallel workers by random seed.
 2. Per candidate: generate tiles, filter by score range + type count, measure the target metric, v3 solvability check.
-3. Save first match to `*_candidate.json`, kill other workers, play via MCP.
+3. Each worker saves its match to its OWN `*_s{seed}.json` file (never a shared/hardcoded filename —
+   two workers racing to write the SAME name silently overwrote a verified board once, see
+   `feedback_verify_before_play.md`). Wait for all workers, independently re-verify each file that
+   exists, pick a winner, then play via MCP. See `docs/CLAUDE.md §6` for the full orchestration.
 
 **Metrics that worked** (ranked by usefulness):
 - **2-adjacent-layer window triple metric** (BEST for "layer dễ" asks): for top N layers, slide a 2-layer window; a type is "easy" if it has ≥3 copies within any window; measure fraction of top-N tiles belonging to easy types. Matches how players actually see triples — they look at top layer + partially exposed layer below and spot triples. Threshold: `window_frac ≥ 0.85`. This is the approved metric when user says "3 layer đầu tiên dễ" / "layer dễ".
@@ -36,5 +39,10 @@ User's typical ask: "tạo level score A-B với N types, top K layer phải d�
 **Parallelism**: 8 workers via `for seed in 1 11 23 47 101 239 991 1001; do python find_x.py $seed > log_$seed.log 2>&1 & done`. Seeds chosen to spread RNG without collisions. Kill via `wmic process where "CommandLine like '%%find_x%%'" delete`.
 
 **Why:** After many experiments across this project, these are the approaches that actually produce candidates the user accepts. The failed metrics looked sensible on paper but consistently misfired against v3's atomic-triple behavior.
+
+Note the "random/greedy playout survival rate" failure above is scoped to the "layer dễ / N-layer easy"
+family of asks specifically — the SAME metric is the correct, deliberately-chosen tool for "trap ẩn"
+classification (`reference/hidden_trap_levels.md`). These aren't contradictory findings; see
+`reference/greedy_vs_exact.md` for the full decision table of when each greedy-vs-exact mechanism applies.
 
 **How to apply:** When user asks for a new level-design constraint, start from this playbook. Pick the metric from the "worked" list closest to their ask. Only invent a new metric if none of the proven ones fit.

@@ -250,3 +250,17 @@ A request like *"a level from this image, 50% of tiles 100%-covered, difficulty 
 5. **Conflict → ask the user**: if constraints are PROVEN mutually infeasible, do NOT silently relax and do NOT ship a bad board. Diagnose quantitatively (which constraints clash, achievable vs requested) and let the user loosen ONE.
 
 (Tile assignment, scoring, the `best`-tracker, and the always-solvable rule live in **tile-level-design**.)
+
+## 11. Boundary with tile-level-design (do not blur these two skills)
+
+Two hard rules, on top of "skills do NOT call each other" (§10):
+
+1. **Never blend geometry-editing and tile-assignment into one operation/turn** unless the user
+   explicitly asked for new/changed geometry. "Assign tiles to Layout_A" is a tile-level-design
+   operation on a FIXED cell set — it is never an implicit invitation to also reshape the layout.
+2. **Once a named layout has been handed off for tile assignment, gen-layout must not silently
+   regenerate or mutate that SAME layout's cell set as a "fix".** A layout whose cell positions
+   differ from what its name/file implies is a DIFFERENT layout — it must get a new name/file, never
+   quietly become `Layout_A1` while still being called `Layout_A`. If a downstream step reveals the
+   geometry doesn't work (e.g. not ÷3), that is feedback to surface to the user or to regenerate an
+   explicitly NEW layout — not license to patch the existing one in place.

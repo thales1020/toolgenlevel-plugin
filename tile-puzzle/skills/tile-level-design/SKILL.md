@@ -18,7 +18,17 @@ when_to_use: "When the user wants to make/generate a level (one or many), assign
 
 ## 2. Solvers
 
-- `verify_smart_v3.solve_v3(board, max_expansions=N)` — DFS, returns `(True/False/None, depth, exp)`
+- `verify_smart_v3.solve_v3(board, max_expansions=N)` — DFS, returns `(True/False/None, depth, exp)`.
+  NORMAL boards only — raises `ValueError` if the board has `i>=1000` special stones (use
+  `solve_special.solve_v3_special` or `solve_any` below), or if `total_cells` isn't ÷3 with no
+  specials (always a caller bug — a mistrimmed/malformed board, never a real "maybe unsolvable" case).
+- `solve_special.solve_v3_special(board, special_ids=(1001,1002), max_expansions=N, special_halves=...)`
+  — REQUIRED whenever the board carries bonus/mission stones; footprint-aware auto-clear.
+- **`scripts/solve_dispatch.solve_any(board, max_expansions=N, special_halves=...)`** — dispatch
+  wrapper, same `(status, depth, exp)` contract. Inspects the board and calls the RIGHT one of the two
+  above. Default entry point for new code that isn't already certain whether its board has specials
+  (e.g. `analyze_level.py --solve-profile`, §4). Existing direct `solve_v3`/`solve_v3_special` call
+  sites that already know their board type don't need to change.
 - `solve_path.solve_with_path(board, N)` — same DFS + records picks
 - `count_solutions.py` — exact count of distinct winning paths (memoized DP, ~15s for 69-cell boards; counts commonly 10³⁰⁺ — too big to discriminate, use only when literally asked "how many solutions")
 - v3 cap **100k** for general use, **50k** for sweeps (90% solvable boards solve <50k)
@@ -124,6 +134,26 @@ parallel run accepts the SAME item a serial `for…: if ok: break` would) and `s
   (catch inside, return a sentinel). `predicate`/`on_result` run in the parent, so they may be closures.
 - Use it to parallelize a per-seed generation sweep ~N-fold on N cores with zero change to which level is
   accepted (it's still exact-verified: solvable + on-target). Pure orchestration, not a quality trade.
+
+### 3.4. Greedy-pick vs exact-solve — 4 mechanisms, and the joint conclusion (`scripts/analyze_level.py --solve-profile`)
+
+Full decision table in `reference/greedy_vs_exact.md` — read it before reaching for any of `playout()`
+(stochastic greedy-player evaluator, `gen_pattern.py`), `min_safe_choices` (exact per-step probe, §3.2),
+the solver-internal atomic-triple collapse, or the deprecated `TileSolver.analyze`; they get confused
+easily and are NOT interchangeable.
+
+`analyze_level.py --solve-profile` is the one place a level's greedy-playout result and its exact
+DFS(v3) result are combined into a persisted, labeled conclusion:
+```python
+metadata["solve_profile"] = {"dfs_solvable": True, "greedy_fail_rate": 0.94,
+                             "greedy_runs": 300, "classification": "hidden_trap"}
+```
+`classification` ∈ `hidden_trap` (fail≥0.90) / `partial_trap` (0.20≤fail<0.90) / `straightforward`
+(fail<0.20) / `unsolvable` / `None` (board has specials — `playout()`'s model doesn't apply). **OFF by
+default** (the 300-playout cost isn't paid on the common `analyze_level.py` path) — pass `--solve-profile`
+to compute it. **Not a difficulty ranking metric** — never sort/compare levels by `classification` in
+place of `new_diffScore`; it answers a different question (does the obvious path diverge from the
+necessary path), same scoping as `min_safe_choices`.
 
 ## 4. Six design patterns — `scripts/gen_pattern.py` (ONE parameterized tool, any layout)
 
@@ -247,11 +277,11 @@ max_layout, max_inter, max_intra, max_cover100, max_pickdiv
 
 | User says | Pattern | Action |
 |---|---|---|
-| "trap ẩn / cần booster" | P1 | `find_trap_fast.py` |
-| "top dễ" | P2 | `find_easy_first_half.py` |
-| "dễ đầu khó cuối" | P3 | `find_bridge_L21.py` |
-| "clear 50% rồi bí" | P4 | `find_clear50_trap.py` |
-| "guided / không đoán mò" | P5 | `find_guided_trap_L21.py` |
+| "trap ẩn / cần booster" | P1 | `gen_pattern.py --pattern 1 --layout <id>` |
+| "top dễ" | P2 | `gen_pattern.py --pattern 2 --layout <id>` |
+| "dễ đầu khó cuối" | P3 | `gen_pattern.py --pattern 3 --layout <id>` |
+| "clear 50% rồi bí" | P4 | `gen_pattern.py --pattern 4 --layout <id>` |
+| "guided / không đoán mò" | P5 | `gen_pattern.py --pattern 5 --layout <id>` |
 | **"score X + layout Y + solvable"** | **P6** | **inline TEEngine** (fastest, ~1-30s) |
 | "tạo 9 levels" | All | `gen_all_9.py` (~20s) |
 | **"N màn test / test set / nhiều màn"** | - | **`gen_test_set.py [N]`** (~2s, spread band, v3-verified) |
@@ -307,7 +337,7 @@ To standardize any saved level JSON to the canonical format:
 
 ## 18. Detailed reference docs (read on demand)
 
-The `reference/` folder next to this SKILL.md holds 16 distilled experience docs. Read the relevant one when going deep:
+The `reference/` folder next to this SKILL.md holds 17 distilled experience docs. Read the relevant one when going deep:
 
 | File | When to read |
 |---|---|
@@ -327,6 +357,7 @@ The `reference/` folder next to this SKILL.md holds 16 distilled experience docs
 | `t3_cover100_pitfall.md` | Why Random fails 510x on cover100>70% |
 | `gen_all_9_pattern.md` | gen_all_9.py parallel batch internals |
 | `difficulty_design_workflow.md` | Distribution-based metrics + 8-worker approach |
+| `greedy_vs_exact.md` | Before reaching for `playout()`/`min_safe_choices`/atomic-collapse/`TileSolver.analyze` — which mechanism for what |
 
 `INDEX.md` = original index of these (point-in-time snapshot).
 
@@ -335,7 +366,7 @@ The `reference/` folder next to this SKILL.md holds 16 distilled experience docs
 This skill bundles everything needed to RUN, not just guidance. Layout (relative to the skill's base dir):
 ```
 SKILL.md
-reference/        — 16 distilled experience docs (read on demand) + INDEX.md
+reference/        — 17 distilled experience docs (read on demand) + INDEX.md
 engine/           — tile_level_simulator.py + verify_smart_v3.py + solve_path.py + scoring_weights.json
 templates/        — find_*.py + gen_*.py (22 gen/sweep scripts)
 sample_layouts/   — 120 empty layout JSON (NewLayout_L3..L120 + Clover/SKY/Smiley)
@@ -365,7 +396,7 @@ Concrete end-to-end runs. Patterns to copy, not just describe.
 # Single-worker often enough; seed 1 hit in 4.7s. Template handles type→score→v3→greedy filter.
 # templates/find_trap_fast.py  <seed> <layout> <score_min> <score_max> <types_min> <types_max>
 python ${CLAUDE_SKILL_DIR}/templates/find_trap_fast.py 1 L20 65 90 15 22
-# -> [84] s=84.4 t=15 fail=100%  SAVED trap_L20_candidate.json
+# -> [84] s=84.4 t=15 fail=100%  SAVED trap_L20_s1.json
 ```
 Then ALWAYS verify + export (don't ship the raw candidate):
 ```python
@@ -485,6 +516,29 @@ skills do NOT call each other**; the hand-off is the `NewLayout_*.json` file.
 5. **Conflict → ask the user**: PROVEN mutually-infeasible constraints → do NOT silently relax (§21) and do NOT ship a bad board (§15). Diagnose quantitatively (which constraints clash, achievable vs requested), then let the user loosen ONE.
 
 **Expose feasibility** so the orchestrator can diagnose: on a miss, return the `best` achieved + which constraint was binding (§21); read gen-layout's `layout_difficulty`/score-ceiling from metadata.
+
+## 22b. Geometry is immutable during tile assignment (do not blur with gen-layout)
+
+Once a layout has been loaded (by name or path) for tile assignment, its cell set — `position_signature`
+in `scripts/analyze_level.py` (`(layer_idx, x, y)` tuples, ignores `tile_id`) — is FROZEN for that
+operation. Any step that changes it must be a distinct, explicitly-invoked stage, never an implicit
+side effect of "assign tiles" or "generate a level":
+
+- **Allowed, correctly-scoped geometry steps**: `gen-layout/scripts/add_stacks.py` (pre-tile, operates
+  on a raw layout with no `tile_id`), and `reserve_special.py`'s special-cell overlay (adds NEW
+  interstitial-layer cells for bonus/mission AFTER a complete solvable normal board exists — a
+  documented, separate stage per §23).
+- **Not allowed**: a "generate/assign tiles" call silently dropping or adding cells as a side effect
+  and still claiming the original layout's name. If a layout isn't `total_cells % 3 == 0`,
+  `gen_pattern.py`/`reserve_special.py` HARD-FAIL by default rather than silently trim — pass
+  `--allow-trim` to explicitly opt in, which then records `metadata.geometry_trimmed = {"from_layout",
+  "dropped_cells"}` on BOTH scripts' output. `gen_pattern.py` additionally renames its output
+  `metadata.layout` field (`L20+trim1`, never bare `L20`) so a trimmed board can't be confused with
+  the pristine `NewLayout_L20.json`; `reserve_special.py`'s output has no `layout` field to begin with
+  (its metadata is scoped to special-cell placement) — `geometry_trimmed` alone is what makes its trim
+  non-silent.
+- A reusable guard exists for new scripts: `analyze_level.assert_geometry_unchanged(before_data,
+  after_data, context=...)` raises loudly if a step's input/output cell sets differ unexpectedly.
 
 ---
 

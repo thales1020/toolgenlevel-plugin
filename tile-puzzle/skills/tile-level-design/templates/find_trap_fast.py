@@ -185,7 +185,7 @@ for attempt in range(30000):
             'total_cells': board.total_cells(),
             'score': final, 'n_types': n_types, 'fail_rate': fail_rate, 'avg_cleared': avg_clr,
         }
-        with open(f'trap_{layout_id}_candidate.json', 'w') as f:
+        with open(f'trap_{layout_id}_s{seed}.json', 'w') as f:
             json.dump(out, f)
         print(f'\nSAVED in {elapsed:.1f}s: score={final} types={n_types} fail={fail_rate*100:.0f}%')
         print(f'Stats: {attempt} attempts, {checked} type-match, {v3_calls} v3 calls, {greedy_calls} greedy runs')
