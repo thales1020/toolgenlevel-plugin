@@ -559,19 +559,15 @@ def _sym_pct(sj):
 
 
 def _load_layout_cells(layout_id):
-    """Doc HINH (chi toa do x,y theo lop) cua mot layout co san tu Note - Layout.csv."""
-    import csv as _csv
-    _csv.field_size_limit(10**7)
+    """Doc HINH (chi toa do x,y theo lop) cua mot layout co san tu layout_cells.json
+    (geometry-only extract cua Note - Layout.csv -- chi x,y theo lop, khong con cac
+    cot khac vi khong co code nao doc chung)."""
     lid = f"L{int(layout_id)}"
-    with open(os.path.join(HERE, "Note - Layout.csv"), encoding="utf-8") as fh:
-        for r in _csv.DictReader(fh):
-            if (r.get("layoutId") or "").strip() == lid:
-                sj = json.loads(r["slotsJson"]); layers = []
-                for ly in sorted(sj["layers"], key=lambda l: l["index"]):
-                    cells = [{"x": float(s["x"]), "y": float(s["y"])} for s in ly["stones"]]
-                    if cells: layers.append({"cells": cells})
-                return layers
-    raise ValueError(f"khong tim thay layout {layout_id} trong Note - Layout.csv")
+    with open(os.path.join(HERE, "layout_cells.json"), encoding="utf-8") as fh:
+        table = json.load(fh)
+    if lid in table:
+        return table[lid]
+    raise ValueError(f"khong tim thay layout {layout_id} trong layout_cells.json")
 
 
 def gen_layout(target_metric="win_rate", target_value=87.0, stage="late",

@@ -198,6 +198,12 @@ def analyze(path, save=False, solve_profile=False):
     print(f"  So layer:        {metadata['n_layers']}")
     print(f"  So tile total:   {metadata['total_tiles']}")
     print(f"  So loai tile:    {metadata['n_types']}")
+    _nt = metadata["n_types"]
+    if not (8 <= _nt <= 22):
+        print(f"  [!] n_types={_nt} ngoai khoang 8-22 cho phep (SKILL.md, khuyen nghi 10-20, "
+              f"+-2 cho do kho cuc doan) -- xem lai yeu cau do kho thay vi day tiep n_types.")
+    elif not (10 <= _nt <= 20):
+        print(f"  [i] n_types={_nt} ngoai khoang khuyen nghi 10-20 (van trong bien +-2 cho do kho cuc doan).")
     if metadata.get("new_diffscore") is not None:
         print(f"  Do kho (new_diffScore): {metadata['new_diffscore']}  [{metadata['difficulty_tier']}]"
               f"   <- RANK levels with THIS (real-play validated)")

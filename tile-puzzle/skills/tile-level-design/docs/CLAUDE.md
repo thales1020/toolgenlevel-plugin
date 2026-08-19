@@ -2,6 +2,24 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Design philosophy: scripts here are agent-consumed, not human-typed
+
+The generation/analysis scripts in this plugin (`gen_pattern.py`, `reserve_special.py`, `add_cloud.py`,
+`diff_score.py`, `solve_special.py`, etc.) are mainly invoked BY AGENTS in the level-design pipeline,
+not typed by a human at a prompt. When writing or changing a script here, optimize for the agent's
+needs over human CLI ergonomics:
+- **Speed matters more, not less** — agents run these in loops/rejection samplers, so latency compounds
+  into tokens and wall-clock.
+- **Machine-readable output** — the level JSON (with its `metadata`/`info` block) IS the deliverable;
+  an agent passes `--out <path>` and reads the file back. Keep the written JSON clean; stdout is logs.
+- **Deterministic** — same seed → same result, so an agent can verify/reproduce.
+- **Actionable failure signals** — on "no candidate found" etc., return non-zero AND a parseable remedy
+  hint ("raise --attempts / widen the score band / relax --fail-rate") so the agent can retry with
+  adjusted params instead of guessing.
+- **Sensible defaults** — agents fiddle with flags less than a human power-user would.
+- Don't over-invest in pretty human-facing help text; DO invest in correctness guarantees (every level
+  verified v3-solvable before delivery) and robustness.
+
 ## Hard requirements (user-enforced, MUST follow)
 
 These are explicit invariants the user has asked to be preserved across sessions. Any new script, metric, or analysis in this project MUST satisfy all of them.

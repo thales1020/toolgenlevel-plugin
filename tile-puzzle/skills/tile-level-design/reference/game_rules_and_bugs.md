@@ -6,6 +6,21 @@ originSessionId: 5bf952b0-04ed-42f3-9813-354182a6e8fb
 ---
 **Tile label display is internal_id + 1 (off-by-one).** The JSON/solver uses 0-indexed tile_ids (0-11 for 12 types). The play UI shows them as 1-indexed labels (1-12). When showing a solution path to the user, always map `display_label = tile_id + 1`. I hit this when the user said "I see tile 10, 4, 7, 7, 8" but my JSON had [9, 3, 6, 6, 7] — they're the same, offset by 1.
 
+**For SHIPPING art, `i` must be a real Group_1 art id — the ids are NOT free-form.** Generated levels
+default to sequential tile_ids (0,1,2,…), which look fine analytically but have no matching sprite in
+the real game. The 30 valid ship ids are `VALID_GROUP1_IDS = [85] + list(range(142, 171))`
+(`gen_pattern.py`). `gen_pattern.py` remaps onto these by default (bijective — no difficulty/
+solvability change); pass `--raw-ids` only if you deliberately want the raw `tile_id+1` sequence
+instead (e.g. for a solver-debug artifact, never for a level meant to actually load in-game).
+
+**Bonus (1001) collides as a CIRCLE, not a box — mission/normal use a box.** Any overlap check
+involving a bonus tile must use `dx**2 + dy**2 < (ha+hb)**2` (corners excluded); mission (1002) and
+normal↔normal pairs use the AABB box `|dx|<ha+hb AND |dy|<ha+hb`. Must stay consistent across
+`solve_special._build_visibility_2x2`, `make_play_html.overlaps()`, and `reserve_special`'s placement
+gates — treating bonus as a box over-covers its corners, wrongly hides the start triple underneath,
+and produces a false "unsolvable" verdict. Half-extents: 2×2 stack → 1.0, 3×3 stack → 1.5, normal →
+0.5. (0.7.2 — collision shape was wrong before that.)
+
 **Tray game-over rule is `size >= 7 AND no triple`, NOT `size > 7`.** From `tile_level_simulator.py:2721-2728` (`PlayWindow._on_click`): after insert + auto-clear, if tray length ≥ 7 with no count ≥ 3, game over fires. My first beam/DFS solvers used `> TRAY_SIZE` (overflow check) which allowed tray=7 states and produced "valid solutions" that instantly lose in the real game. Fix: `(tsize + 1) >= TRAY_SIZE` skip.
 
 **Atomic triple optimization in DFS must bounds-check intermediate tray size.** When doing a "pick 3 of same type" atomic action, intermediate state between pick 1 and pick 3 has tray size `cur_tsize + (needed-1)` before the clear fires. That intermediate must be `< TRAY_SIZE`. I originally only checked the final size, which let invalid solutions through.

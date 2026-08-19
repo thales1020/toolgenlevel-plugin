@@ -1,5 +1,109 @@
 # Changelog — tile-puzzle
 
+## 0.9.4 — new script: `diffscore_range.py` (achievable new_diffScore range for a layout)
+
+New function, requested directly: given a layout, return the min/max achievable `new_diffScore`.
+
+- `scripts/diffscore_range.py <layout> [--n-types N] [--samples 3] [--v3-cap 15000] [--time-budget 15]`
+  — a probe over a handful of SOLVABLE boards only.
+  - `--n-types N` given: sweeps only that value, reports min/max across `--samples` solvable attempts.
+  - Omitted: sweeps the design rule's default range **10–20** (§4.4/0.9.2), clamped to the layout's
+    capacity — e.g. capacity 13 sweeps `{10, 13}`, not `{10, 15, 20}`. Reports the global min/max
+    across all points, plus which `n_types` achieved each.
+  - Fails loudly and immediately (no wasted attempts) if `--n-types` is outside `[2, capacity]`; fails
+    with an actionable message (not a silent `None`) if zero attempts came back solvable.
+- Deliberately NOT exhaustive — a fast mid-design probe ("does this layout even reach Extreme"), not a
+  replacement for `templates/difficulty_minmax_solvable_parallel.py`'s full per-tile_count CSV sweep
+  (which still scores with the OLD `final_score`, a separate gap not addressed here).
+- Documented in `SKILL.md` next to the `n_types` range rule it complements.
+
+**Caught by a follow-up audit before this shipped, and fixed in the same version** (a subagent asked
+to independently verify the calculation logic, running real code rather than trusting the
+implementation): a flat, fixed sample count per `n_types` under-sampled exactly the endpoint that
+matters most for MAX — higher `n_types` solves less often (harder board), so `n_types=20` regularly
+came back with 0-1 solvable samples out of 3 while `n_types=10-15` filled easily, making the reported
+MAX look ~30 points lower than what the layout can actually reach (confirmed: 98.13 reported vs 130.37
+achievable on a real layout). Fixed with **adaptive per-point sampling** (keep retrying a point, up to
+a bound, until `--samples` solvable hits land or a GLOBAL `--time-budget` is spent) plus a new
+`per_n_types` field in the result reporting solvable/tried per point and a `timed_out` flag, so a
+caller can see when a number is under-supported instead of trusting a silently-thin sample. The
+retry-until-success fix is itself slower, which pushed wall-clock on a large layout to 39s against a
+15s budget with the original `--v3-cap 30000` default — lowered the default to **15000** (tuned against
+real measurements, not guessed: 30k let a single solve_v3 call dominate the whole budget by itself; 5k
+was too cheap to ever prove a board solvable near `n_types=20`, i.e. zero signal, not just slower).
+Net effect: typical/small layouts (capacity ~13-24) stay fast; large/deep ones (capacity 40+) may still
+run somewhat past the nominal 15s (a single already-started solve_v3 call can't be interrupted) or come
+back with an honestly-flagged thin sample at the high end — both documented in the script's docstring
+rather than smoothed over.
+
+## 0.9.3 — memory/plugin-doc parity audit
+
+Prompted by a real symptom: an agent forgot the "tile ids must come from a fixed set" rule mid-work.
+Root cause: that rule (and one other, the bonus-circular-collision shape) lived only in the operator's
+private cross-session memory + a code comment — never written into the plugin's own docs, so any
+fresh agent/subagent/other machine invoking the skill had no way to see it. Both were added to
+`reference/game_rules_and_bugs.md` (see the commit right before this one).
+
+Followed with a full audit: all ~26 memory entries checked against the plugin's actual `.md` files
+(4 parallel agents, one per batch, each re-verifying against live code rather than trusting the
+memory text). Result: most were already documented; 3 more real, load-bearing gaps found and fixed —
+
+- **`reference/solver_pruning_history.md`** (new) — which solver pruning ideas are proven unsound
+  (atomic-triple collapse for existence queries, tray-submultiset dominance) vs theoretically sound
+  but unimplemented (POR local-independence), and why. Existed only as a literature-survey memory;
+  nothing stopped a future agent from re-attempting a pruning already known to be wrong.
+- **`gen-layout/SKILL.md` §4b** (new) — the "quality beats throughput" bar for every layout (solvable
+  always, symmetric, cells ~48–126/layers ~2–7, reject lopsided/sparse, prefer parametric over
+  icon→pyramid). Previously only stated as the historical justification for retiring bulk mode, not
+  as a standing rule for ongoing single-layout generation.
+- **`docs/CLAUDE.md`** (new intro section) — "scripts here are agent-consumed, not human-typed" design
+  philosophy (prioritize speed/determinism/machine-readable output/actionable failures). Existed only
+  in a changelog entry (historical, not a standing instruction) and in memory.
+
+Also fixed two smaller doc gaps (`gen-layout/SKILL.md` §9: `layout_diff` 0–12 is a different, tile-free
+scale from `new_diffScore` 0–190 — was easy to conflate) and two stale memory entries that no longer
+matched the repo (a resolved "untracked file" warning; a pre-plugin-migration directory map) — updated
+in place rather than left to mislead a future session.
+
+## 0.9.2 — new rule: n_types range (10–20, ±2 for extreme difficulty)
+
+New design rule, requested directly: every level should have **10–20** distinct tile types
+(`n_types` — special 1001/1002 collapse to 1 bucket, per the existing `new_diffScore` definition).
+An extreme difficulty target may push this to **8–22**, never further — `n_types` is the strongest
+lever on `new_diffScore` (+2.897/type per §4.1), so it's the easiest knob to over-push past what the
+score is actually asking for.
+
+- Documented at the source of truth: `TileLevel_AI_KnowledgeBase.md` §4.4 (new section, next to the
+  `new_diffScore` formula it derives from).
+- Propagated into the plugin: `tile-level-design/SKILL.md`, next to the `new_diffScore` tier table.
+- `analyze_level.py` now prints a warning when a level's `n_types` falls outside 8–22 (hard) or
+  10–20 (soft, still within the ±2 extreme-difficulty band) — visibility only, not a hard-fail (this
+  is a design guideline, not a structural impossibility like the ÷3 rule).
+
+## 0.9.1 — plugin size reduction (no behavior change)
+
+Housekeeping only, prompted by a bloat check ("plugin có đang phình to không?"): the plugin was
+14MB, 41% of it a single CSV.
+
+- **`winrate-target/Note - Layout.csv` (5.7MB) → `layout_cells.json` (2.7MB, 53% smaller).**
+  `_load_layout_cells()` was confirmed (grep, only call site in the whole plugin) to read just two
+  columns — `layoutId` and `slotsJson`, and from `slotsJson` only each stone's `x`/`y`. Extracted a
+  compact `{layoutId: [{"cells":[{"x","y"}]}]}` map ahead of time; verified byte-identical output
+  against the old CSV-parsing logic on a 30-layout random sample (all 1501 distinct layoutIds
+  preserved) plus a live import of the updated function. `Note - Layout.csv` removed.
+- **`tile-level-design/templates/` (21 scripts) → 17 top-level + 4 archived.** Moved
+  `find_hybrid_custom.py`, `difficulty_minmax.py`, `difficulty_minmax_combined.py`,
+  `gen_5_patterns.py` into `templates/_archive/` — each has a *confirmed* successor (not a guess):
+  `find_hybrid_custom_fast.py`'s own docstring states it fixes `find_hybrid_custom.py`'s bottleneck
+  (and `gen_all_9.py` already calls the `_fast` one); `docs/CLAUDE.md` §4 already names
+  `difficulty_minmax_solvable_parallel.py` as canonical over the other two; `gen_5_patterns.py` is
+  functionally absorbed by `scripts/gen_pattern.py --pattern N` and wasn't cited as an active
+  recommendation in any doc. Left everything still depended on by `gen_all_9.py` or recommended
+  in an active user-phrase-mapping table untouched, rather than guess at equivalence (e.g.
+  `find_easy_first_half.py`'s window-metric is called out as "preferred" in
+  `solver_infrastructure.md` — not touched without verifying `gen_pattern.py --pattern 2` matches
+  it exactly, which wasn't done this pass).
+
 ## 0.9.0 — skill boundary hardening, generation-pipeline race fix, greedy-vs-exact conclusion
 
 Four fixes reported from real usage, each investigated with direct source evidence (not speculation)

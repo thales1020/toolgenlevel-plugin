@@ -57,6 +57,22 @@ new_diffScore = max(0, -28.42 + 0.655·intra_group + 0.804·cover100 + 2.897·n_
 | 50 – 65 | Very Hard |
 | ≥ 65 | Extreme |
 
+**Rule — `n_types` range**: every level should have **10–20** distinct tile types. Since `n_types` is
+the strongest lever on `new_diffScore` (+2.897/type), an extreme difficulty target may need to push
+past that — allowed to **8–22**, never further. Outside 8–22 means the difficulty ask itself needs
+re-checking, not another `n_types` push. (`TileLevel_AI_KnowledgeBase.md` §4.4 is the source of truth
+for this rule.)
+
+**Before committing to a layout for a difficulty target, check what it can actually reach**:
+`scripts/diffscore_range.py <layout> [--n-types N]` — fast probe (fast on typical layouts, ≤~15-16s
+soft budget on large/deep ones — see the script's docstring), a few solvable samples,
+returns the achievable `new_diffScore` **min/max** for that layout. Omit `--n-types` to sweep the
+10–20 default range (clamped to the layout's capacity) and get the layout's overall achievable range;
+pass `--n-types N` to check one specific value. This is NOT an exhaustive sweep (see
+`templates/difficulty_minmax_solvable_parallel.py` for that, though it still scores with the OLD
+`final_score`) — it's meant to be called mid-design, e.g. "does layout L20 even reach Extreme before I
+commit to it."
+
 **Known limitation:** static-only, BLIND to in-level mechanics → it **always UNDER-rates** hard mechanic
 levels (never over-rates), EXCEPT the `+22.76` mystery term which **OVER-rates** already-easy mystery
 boards. Board-only ceiling ≈ 0.63–0.66; treat tiers as a relative guide. Don't sprinkle Mystery casually.
@@ -337,11 +353,11 @@ To standardize any saved level JSON to the canonical format:
 
 ## 18. Detailed reference docs (read on demand)
 
-The `reference/` folder next to this SKILL.md holds 17 distilled experience docs. Read the relevant one when going deep:
+The `reference/` folder next to this SKILL.md holds 18 distilled experience docs. Read the relevant one when going deep:
 
 | File | When to read |
 |---|---|
-| `game_rules_and_bugs.md` | Before writing ANY solver/replay — the bug-causing invariants |
+| `game_rules_and_bugs.md` | Before writing ANY solver/replay, AND before shipping any generated level — bug-causing invariants incl. tile_id display offset, the fixed Group_1 ship-art id set, bonus's circular collision shape |
 | `solver_infrastructure.md` | Which solver for what (v3 / solve_path / count_solutions) |
 | `effective_layer_concept.md` | Understanding cover100 + strip 2-window mechanics |
 | `level_design_patterns.md` | Full 6-pattern catalog with method + template |
@@ -358,6 +374,7 @@ The `reference/` folder next to this SKILL.md holds 17 distilled experience docs
 | `gen_all_9_pattern.md` | gen_all_9.py parallel batch internals |
 | `difficulty_design_workflow.md` | Distribution-based metrics + 8-worker approach |
 | `greedy_vs_exact.md` | Before reaching for `playout()`/`min_safe_choices`/atomic-collapse/`TileSolver.analyze` — which mechanism for what |
+| `solver_pruning_history.md` | Before attempting ANY new node-reduction pruning for `solve_v3`/`winnable`/`min_safe_choices` — what's proven unsound (atomic collapse, tray-submultiset dominance) and why |
 
 `INDEX.md` = original index of these (point-in-time snapshot).
 
@@ -366,9 +383,10 @@ The `reference/` folder next to this SKILL.md holds 17 distilled experience docs
 This skill bundles everything needed to RUN, not just guidance. Layout (relative to the skill's base dir):
 ```
 SKILL.md
-reference/        — 17 distilled experience docs (read on demand) + INDEX.md
+reference/        — 18 distilled experience docs (read on demand) + INDEX.md
 engine/           — tile_level_simulator.py + verify_smart_v3.py + solve_path.py + scoring_weights.json
-templates/        — find_*.py + gen_*.py (22 gen/sweep scripts)
+templates/        — find_*.py + gen_*.py (17 gen/sweep scripts; templates/_archive/ holds 4 more,
+                    superseded, kept for provenance only — see its README)
 sample_layouts/   — 120 empty layout JSON (NewLayout_L3..L120 + Clover/SKY/Smiley)
 scripts/          — analyze_level.py, batch_normalize.py, open_any_level.py, export_trap.py,
                     reserve_special.py, solve_special.py, add_special_cells.py, export_game_format.py (special cells §23)

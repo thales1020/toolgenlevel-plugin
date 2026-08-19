@@ -26,3 +26,8 @@ it answers "does the obvious path diverge from the necessary path," which is ort
 
 v1 scope is DFS + `playout()` only. Folding `min_safe_choices`'s exact per-step signal into the same
 field (e.g. a `bottleneck_at_step` sub-field) is a possible v2 follow-up, not done here.
+
+For a different but related question — "can the DFS itself be made faster by pruning the search
+tree" — see `reference/solver_pruning_history.md`. Atomic-triple collapse (row 3 above) is sound
+*inside* `solve_v3`'s own DFS; that history file covers why the SAME idea is unsound when reused for
+an existence query like `winnable`/`min_safe_choices`, plus what else was tried and rejected.

@@ -131,6 +131,23 @@ single layout > a pile of mediocre ones. gen-layout now does **one symmetry-rank
 If you genuinely need many layouts, compose them **one at a time** (each gets the 4-axis symmetry
 check), or use the 120 bundled sample layouts in the `tile-level-design` skill.
 
+### 4b. Quality bar — applies to every layout, not just bulk
+
+The reason bulk mode was retired is a standing rule, not a one-time decision: **quality beats
+throughput**. "Gen 1 layout" means 1 *usable* layout — verified and aesthetically good — not one more
+raw file for a human to filter later. Every layout produced must clear all of:
+- **Solvable, always** — run v3 verify, never skip it for speed.
+- **Symmetric** — the 120 real sample layouts (L3–L120) are all symmetric; an asymmetric result reads
+  as unintentional/unpolished.
+- **Sized like a real layout** — cells ~48–126, layers ~2–7; reject extremes outside that band.
+- **Enough initial pickable cells**, cover ratio appropriate to the target strategy class
+  (Cascade/Priority/Random — see `tile-level-design/reference/layout_strategy_mapping.md`).
+- **Not lopsided/sparse/disconnected** — reject and retry rather than deliver a weak shape.
+- **Prefer parametric/procedural generation** (shape families × params × symmetry, cell-count
+  controlled, solvable-by-design) over icon→silhouette→pyramid, which tends to blob, distort the
+  silhouette, or leave cell count uncontrolled. Icon→shape stays available as an optional themed
+  feature, but always with a visual review step, never as the default path.
+
 ---
 
 ## 5. Hard invariants (from game engine)
@@ -234,6 +251,11 @@ gen-layout/
 | layout_diff | ~5-6 | 3-10 |
 
 A **solid filled silhouette** (fill ~1.0, n_clusters=1) is the #1 off-distribution pattern — never generate it.
+
+**`layout_diff` (~0–12, this table) is a different scale from `new_diffScore` (~0–190, in
+`tile-level-design/SKILL.md`)** — this one is tile-FREE (geometry only), that one needs tiles assigned
+(`n_types`/`cover100`/etc. are inputs). Don't compare the two numbers directly; `layout_diff` only
+describes the empty shape.
 
 ---
 
