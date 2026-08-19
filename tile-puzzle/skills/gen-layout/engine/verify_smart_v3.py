@@ -40,17 +40,19 @@ def solve_v3(board, max_expansions=None, verbose=False):
     cells = board.all_cells()
     n = len(cells)
     tile_ids = [c.tile_id for c in cells]
-    # A NORMAL board (no bonus 1001 / mission 1002) can only ever fully clear in units of 3 -- every
-    # win removes exactly 3 same-type tiles. n % 3 != 0 here is ALWAYS a caller bug (wrong/mistrimmed
-    # board passed in), never a legitimate "maybe unsolvable" case worth spending DFS time on. Fail
-    # loud and immediate instead of returning a meaningless False after real search cost.
-    if n % 3 != 0 and not any(t >= 1000 for t in tile_ids):
-        raise ValueError(
-            f"solve_v3: board has {n} cells, not divisible by 3, and no special tiles (i>=1000) -- "
-            f"this board can never be fully cleared by any solver, so this is a caller bug (a "
-            f"mistrimmed or malformed board), not a real solvability question. If this board "
-            f"legitimately carries bonus/mission tiles, use solve_special.solve_v3_special (or "
-            f"solve_any) instead of solve_v3.")
+    # REMOVED (0.9.0->0.9.5): a guard used to raise ValueError here whenever `n % 3 != 0` with no
+    # special tiles, reasoning "every win removes exactly 3 same-type tiles, so this can never fully
+    # clear." That reasoning was WRONG -- confirmed directly against the game engine's real win check
+    # (tile_level_simulator.py PlayWindow._pick_tile: `if not self.active: self.won = True`). The win
+    # condition is the BOARD being empty (every cell picked), NOT the tray being empty. A type whose
+    # count isn't a multiple of 3 just leaves 1-2 unmatched tiles sitting in the tray forever once
+    # picked -- still a win, as long as the tray never hits TRAY_SIZE with no available triple along
+    # the way. This solver's own `active == 0: return True` below already encodes the correct rule;
+    # the removed guard was short-circuiting BEFORE that correct search could run, incorrectly
+    # rejecting real, winnable boards (e.g. a shipped level with 77 cells, one type at 8 copies).
+    # `KnowledgeBase_LevelFormat_Standard.md`'s "÷3 rule" is a DESIGN CONVENTION for clean type
+    # distributions (used by generators like gen_pattern.py by default), not a hard solvability
+    # requirement -- do not reintroduce this as a solver-level guard.
     blocked_by, blocks = build_bitmask_visibility(cells)
     n_types = max(tile_ids) + 1
 

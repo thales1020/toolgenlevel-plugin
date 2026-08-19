@@ -1,5 +1,43 @@
 # Changelog — tile-puzzle
 
+## 0.9.5 — REVERT: 0.9.0's ÷3 guard in `solve_v3` was wrong, incorrectly rejected winnable boards
+
+**Regression, confirmed and fixed.** The 0.9.0 changelog entry below (kept as-is, historical record —
+see the correction here instead of editing it) describes a `solve_v3` guard added on the reasoning
+"a NORMAL board with `total_cells % 3 != 0` can never fully clear — always a caller bug." That
+reasoning was **wrong**, caught by the user pointing at another machine's plugin output for a real
+level (level 873: 77 cells, one tile type at 8 copies — not a multiple of 3 — genuinely solvable).
+
+Confirmed directly against the game engine's actual win check
+(`tile_level_simulator.py PlayWindow._pick_tile`): `if not self.active: self.won = True`, checked
+BEFORE the game-over/lose condition. **Win is the board being empty (every cell picked), NOT the tray
+being empty.** A tile type whose count isn't a multiple of 3 just leaves 1-2 tiles stuck in the tray
+permanently once picked — that is still a win, as long as the tray never reaches 7 with no available
+triple at any point along the way. `solve_v3`'s own DFS already encoded this correctly
+(`if active == 0: return True`) — the 0.9.0 guard was short-circuiting BEFORE that correct search
+could run, rejecting real winnable boards with a `ValueError` instead of solving them.
+
+- **Reverted**: the `n % 3 != 0` early-`ValueError` guard removed from `solve_v3` in both engine
+  copies (`tile-level-design/engine/` and `gen-layout/engine/`, byte-parity restored). Verified: a
+  hand-built 8-cell single-type board (matching the reported case) now returns `True` instead of
+  raising.
+- **NOT reverted** (different, still-valid concern): `gen_pattern.py`/`reserve_special.py`'s
+  hard-fail-by-default when trimming a layout to ÷3 for tile assignment. That guard is about not
+  *silently* dropping cells from a named layout's geometry (Task 1, 0.9.0) — a data-integrity concern,
+  unrelated to whether ÷3 is required for solvability. Their per-type ÷3 default is a generator DESIGN
+  CONVENTION (clean, no-leftover distributions), not a solvability requirement.
+- Corrected the same false claim everywhere it had propagated: `SKILL.md` §2,
+  `reference/game_rules_and_bugs.md` (new entry), and the root `TileLevel_AI_KnowledgeBase.md` §0.4 /
+  §3.3 / §3.4 (the authoritative spec doc — this is where the original, incorrect "÷3 rule" was first
+  written; a hard "if wrong, impossible regardless of arrangement" claim that had never actually been
+  checked against the engine's real win condition, despite the doc's own claim that "every number here
+  is verified against real game data or the solver").
+- **Lesson**: a hard-fail guard framed as protecting against wasted solver time is itself a claim
+  about game rules that needs the SAME evidence bar as everything else in this project — verify
+  against the actual engine, not against an assumption that sounds structurally obvious ("3 tiles per
+  match, so counts must be multiples of 3"). It sounded right and wasn't checked against
+  `PlayWindow._pick_tile` until a real rejected level forced the question.
+
 ## 0.9.4 — new script: `diffscore_range.py` (achievable new_diffScore range for a layout)
 
 New function, requested directly: given a layout, return the min/max achievable `new_diffScore`.

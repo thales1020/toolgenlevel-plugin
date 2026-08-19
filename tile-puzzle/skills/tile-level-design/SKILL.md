@@ -20,8 +20,12 @@ when_to_use: "When the user wants to make/generate a level (one or many), assign
 
 - `verify_smart_v3.solve_v3(board, max_expansions=N)` — DFS, returns `(True/False/None, depth, exp)`.
   NORMAL boards only — raises `ValueError` if the board has `i>=1000` special stones (use
-  `solve_special.solve_v3_special` or `solve_any` below), or if `total_cells` isn't ÷3 with no
-  specials (always a caller bug — a mistrimmed/malformed board, never a real "maybe unsolvable" case).
+  `solve_special.solve_v3_special` or `solve_any` below). Does NOT require `total_cells % 3 == 0` —
+  win is board-empty (`active == 0`), not tray-empty; a type with a non-multiple-of-3 count just
+  leaves 1-2 tiles stuck in the tray forever, which still wins as long as the tray never hits 7 with
+  no available triple. (0.9.0 shipped an incorrect guard that raised `ValueError` on any non-÷3,
+  no-special board — reverted in 0.9.5, see CHANGELOG. `%3==0` per type is a generator DESIGN
+  CONVENTION for clean distributions, not a solvability requirement — see `reference/game_rules_and_bugs.md`.)
 - `solve_special.solve_v3_special(board, special_ids=(1001,1002), max_expansions=N, special_halves=...)`
   — REQUIRED whenever the board carries bonus/mission stones; footprint-aware auto-clear.
 - **`scripts/solve_dispatch.solve_any(board, max_expansions=N, special_halves=...)`** — dispatch
