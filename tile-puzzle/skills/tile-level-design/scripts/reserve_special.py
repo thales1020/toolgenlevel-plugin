@@ -90,6 +90,16 @@ def _gen_normal_level(layout, cc, distance, seed, allow_trim=False):
     board = load_board_from_file(layout)
     if board is None:
         raise SystemExit(f"could not load board from {layout} (absolute path required on Windows)")
+    _pre_specials = [c for c in board.all_cells() if c.tile_id >= 1000]
+    if _pre_specials:
+        raise SystemExit(
+            f"layout {layout} already has {len(_pre_specials)} special cell(s) (bonus/mission, "
+            f"tile_id>=1000). reserve_special.py's normal-level step calls clear_tiles() and reassigns "
+            f"EVERY cell -- pointing it at an already-special level would silently wipe the special(s) "
+            f"into normal tiles, losing the mission/bonus and corrupting the ÷3 normal count and the "
+            f"solvability check. This tool expects an EMPTY layout (no tiles). To rebuild a level that "
+            f"already has specials, strip them to a bare geometry-only layout first, or don't re-run "
+            f"this tool against an already-built special level.")
     board.clear_tiles()
     cells = board.all_cells()
     rem = len(cells) % 3

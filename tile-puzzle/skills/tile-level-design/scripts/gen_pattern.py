@@ -83,6 +83,16 @@ def _load_trimmed(path, allow_trim=False):
     if board is None:
         raise SystemExit(f"could not load board from {path} (absolute path required on Windows)")
     cells = board.all_cells()
+    specials = [c for c in cells if c.tile_id >= 1000]
+    if specials:
+        raise SystemExit(
+            f"layout {path} already has {len(specials)} special cell(s) (bonus/mission, tile_id>=1000). "
+            f"gen_pattern.py assigns fresh tile ids to EVERY cell it loads -- pointing it at an "
+            f"already-special level would silently overwrite the special(s) into normal tiles, losing "
+            f"the mission/bonus and corrupting the ÷3 count and solvability check. gen_pattern.py is for "
+            f"a geometry-only layout (no tiles). To rebuild a level that needs specials: gen the NORMAL "
+            f"level first (on the bare layout), then add specials back with reserve_special.py / "
+            f"add_special_cells.py as a separate POST step -- never re-tile a file that already has them.")
     rem = len(cells) % 3
     trim_info = None
     if rem:

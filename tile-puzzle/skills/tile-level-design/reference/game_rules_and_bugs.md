@@ -33,6 +33,20 @@ per type is a generator DESIGN CONVENTION (`gen_pattern.py`/`reserve_special.py`
 clean, no-leftover distributions) — never reintroduce it as a solver-level correctness guard; if a
 board's solvability is in question, run `solve_v3`/`solve_any`, don't precompute an answer from ÷3.
 
+**Re-tiling tools must refuse an input that already has special cells (bonus/mission).** `gen_pattern.py::_load_trimmed` and `reserve_special.py::_gen_normal_level` both load a file via
+`load_board_from_file` and then discard/overwrite `tile_id` on EVERY cell (`_load_trimmed` keeps only
+`(x,y,layer_idx)`; `_gen_normal_level` calls `board.clear_tiles()`) before assigning fresh colors.
+Neither checked whether the loaded cells already included a special (`tile_id >= 1000`, bonus 1001 /
+mission 1002). Pointing either tool's `--layout` at an already-built special level (instead of a bare
+geometry-only layout, which is what both are documented to expect) silently turned the mission/bonus
+cell into an ordinary color tile: the mission tile was lost, the ÷3 normal-count check ran over the
+wrong cell set (it includes the special's position), and the solvability verdict (`solve_v3`, not
+`solve_v3_special`) was computed on the now-corrupted board — matching a real bug report (regenerating
+a level that had a mission tile silently dropped it and broke both the tile count and the solvability
+check). Fixed: both loaders now hard-`SystemExit` the moment they see `tile_id >= 1000` in the input,
+before any tile_id is touched. Confirms [[feedback_special_cells_post_gen]]: specials are a separate
+POST-step on a finished base level — never mixed into a re-tiling/regen pass. (0.9.6.)
+
 **Tray game-over rule is `size >= 7 AND no triple`, NOT `size > 7`.** From `tile_level_simulator.py:2721-2728` (`PlayWindow._on_click`): after insert + auto-clear, if tray length ≥ 7 with no count ≥ 3, game over fires. My first beam/DFS solvers used `> TRAY_SIZE` (overflow check) which allowed tray=7 states and produced "valid solutions" that instantly lose in the real game. Fix: `(tsize + 1) >= TRAY_SIZE` skip.
 
 **Atomic triple optimization in DFS must bounds-check intermediate tray size.** When doing a "pick 3 of same type" atomic action, intermediate state between pick 1 and pick 3 has tray size `cur_tsize + (needed-1)` before the clear fires. That intermediate must be `< TRAY_SIZE`. I originally only checked the final size, which let invalid solutions through.

@@ -1,5 +1,27 @@
 # Changelog — tile-puzzle
 
+## 0.9.6 — FIX: regenerating a level that already has a mission/bonus tile silently destroyed it
+
+**Bug, confirmed and fixed.** Regenerating (re-tiling) a level that already carried a mission tile
+would silently turn that mission cell into an ordinary color tile — losing the mission tile entirely,
+corrupting the level's tile count, and making the solvability check run against the wrong board.
+
+Root cause: `gen_pattern.py::_load_trimmed` and `reserve_special.py::_gen_normal_level` both load the
+input file and then discard/overwrite `tile_id` on EVERY cell before assigning fresh colors
+(`_load_trimmed` keeps only `(x,y,layer_idx)`, throwing away `tile_id`; `_gen_normal_level` calls
+`board.clear_tiles()`). Neither checked whether the loaded cells already included a special
+(`tile_id >= 1000`, bonus 1001 / mission 1002). Both tools are documented to expect a bare,
+geometry-only layout (no tiles) — but nothing enforced that, so pointing either at an already-built
+special level silently wiped the special. Downstream effects: the ÷3 normal-cell count included the
+special's position (wrong denominator), and `solve_v3` (not `solve_v3_special`) ran on the
+now-corrupted board, so the reported solvability no longer matched the level the user thought they had.
+
+Fixed: both loaders now hard-fail (`SystemExit`) the instant they see any `tile_id >= 1000` in the
+loaded input, before touching any tile_id — pointing them at an already-special level is refused
+outright instead of silently corrupted. See `reference/game_rules_and_bugs.md` for the full writeup.
+Specials remain a separate POST-step (`reserve_special.py` / `add_special_cells.py`) on a finished
+BASE (no-special) level — never mixed into a re-tiling/regen pass.
+
 ## 0.9.5 — REVERT: 0.9.0's ÷3 guard in `solve_v3` was wrong, incorrectly rejected winnable boards
 
 **Regression, confirmed and fixed.** The 0.9.0 changelog entry below (kept as-is, historical record —
